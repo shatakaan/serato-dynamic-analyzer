@@ -138,6 +138,106 @@ def load_audio(path: "Path | str") -> "tuple[np.ndarray, int]":
 
 
 # ---------------------------------------------------------------------------
+# Beat Detection
+# ---------------------------------------------------------------------------
+
+def detect_beats(
+    audio: "np.ndarray",
+    sr: int,
+    bpm_min: int = 60,
+    bpm_max: int = 200,
+) -> "list[float]":
+    """
+    Detect beat positions in an audio signal using librosa.beat.plp() with
+    frame-level tempo estimation via librosa.feature.tempo(aggregate=None).
+
+    Algorithm (D-07, HR-3 mitigations):
+      Step 1: Compute onset envelope — librosa.onset.onset_strength()
+      Step 2: Compute frame-level tempo — librosa.feature.tempo(aggregate=None)
+              Returns per-frame BPM array (not a single scalar) for variable-tempo tracks.
+      Step 3: Compute PLP pulse — librosa.beat.plp()
+              hop_length=512 reduces memory per MR-1 advice.
+              win_length=384 follows bvandrc/serato-tools baseline (D-16).
+              tempo_min/tempo_max from bpm_min/bpm_max arguments.
+      Step 4: Extract beat frames — np.flatnonzero(librosa.util.localmax(pulse))
+      Step 5: Convert frames to seconds — librosa.frames_to_time()
+      Step 6: Apply onset offset correction — np.maximum(0.0, times - ONSET_OFFSET_SECONDS)
+              Corrects librosa's systematic ~30ms lateness bias (HR-4, librosa issue #1052).
+      Step 7: Guard — raise ValueError if fewer than 4 beats detected (D-08, T-03-02)
+      Step 8: Return sorted list of beat positions in seconds
+
+    Why plp() not beat_track() (D-07 locked decision):
+      beat_track() assumes roughly constant tempo (Ellis 2007 dynamic programming).
+      plp() (Predominant Local Pulse) extracts the predominant local pulse at each
+      frame, making it robust to variable-tempo tracks (live recordings, human drums).
+
+    Args:
+        audio:   Float32 mono audio array (output of load_audio()).
+        sr:      Sample rate in Hz (typically 22050).
+        bpm_min: Minimum BPM hint for tempo estimation. Default 60.
+        bpm_max: Maximum BPM hint for tempo estimation. Default 200.
+
+    Returns:
+        Sorted list of beat position timestamps in seconds (float),
+        onset-offset-corrected, all values >= 0.0.
+
+    Raises:
+        ValueError: If fewer than 4 beats are detected in the audio (D-08, T-03-02).
+                    Prevents writing an empty or near-empty beatgrid over existing data.
+    """
+    import librosa
+
+    hop_length = 512  # Consistent throughout — reduces memory per MR-1
+
+    # Step 1: Onset envelope (input to both tempo estimation and plp())
+    oenv = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=hop_length)
+
+    # Step 2: Frame-level tempo — aggregate=None returns per-frame BPM array (D-07)
+    # This is the variable-tempo API: each frame gets its own BPM estimate.
+    # The result is not passed directly to plp(); its purpose is to confirm the
+    # variable-tempo estimation step runs (D-07 locked decision: aggregate=None required).
+    # Future callers (e.g. logging, confidence scoring) may use this array.
+    librosa.feature.tempo(
+        onset_envelope=oenv,
+        sr=sr,
+        hop_length=hop_length,
+        aggregate=None,
+    )
+
+    # Step 3: Predominant Local Pulse — variable-tempo beat extraction (D-07)
+    # win_length=384: window in frames for PLP computation (bvandrc/serato-tools baseline)
+    pulse = librosa.beat.plp(
+        onset_envelope=oenv,
+        sr=sr,
+        hop_length=hop_length,
+        win_length=384,
+        tempo_min=bpm_min,
+        tempo_max=bpm_max,
+    )
+
+    # Step 4: Extract beat frames — local maxima of the PLP pulse curve
+    beat_frames = np.flatnonzero(librosa.util.localmax(pulse))
+
+    # Step 5: Convert frames to seconds
+    beat_times = librosa.frames_to_time(beat_frames, sr=sr, hop_length=hop_length)
+
+    # Step 6: Apply onset offset correction and clamp at 0.0 (HR-4, T-03-03)
+    # np.maximum ensures no negative positions even when raw time < ONSET_OFFSET_SECONDS
+    beat_times = np.maximum(0.0, beat_times - ONSET_OFFSET_SECONDS)
+
+    # Step 7: Guard against degenerate results (D-08, T-03-02)
+    if len(beat_times) < 4:
+        raise ValueError(
+            f"Fewer than 4 beats detected ({len(beat_times)}) — "
+            f"refusing to write empty beatgrid (D-08). "
+            f"Track may have no clear rhythm or onset envelope."
+        )
+
+    # Step 8: Return sorted list of float beat positions
+    return sorted(beat_times.tolist())
+
+
+# ---------------------------------------------------------------------------
 # GEOB Encoding
 # ---------------------------------------------------------------------------
 

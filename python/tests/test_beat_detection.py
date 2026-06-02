@@ -22,6 +22,21 @@ import pytest
 
 # Add the python directory to the path so we can import analyze
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Import librosa submodules eagerly so they are all in sys.modules before any
+# unittest.mock.patch() context managers run. librosa uses lazy submodule loading —
+# plain `import librosa` only loads librosa.version. The first time patch() resolves
+# e.g. 'librosa.beat.plp', Python must import librosa.beat, whose module-level code
+# calls moved()(tempo) via the decorator library. If librosa.feature.tempo is already
+# mocked at that point, decorator tries to set __qualname__ on the MagicMock → fails.
+# Pre-importing all submodules below caches them in sys.modules, so patch() replaces
+# already-loaded attributes instead of triggering a module load during __enter__.
+import librosa          # noqa: E402
+import librosa.beat     # noqa: E402 — pre-load to avoid __qualname__ mock collision
+import librosa.feature  # noqa: E402
+import librosa.onset    # noqa: E402
+import librosa.util     # noqa: E402
+
 from analyze import detect_beats, encode_markers, ONSET_OFFSET_SECONDS
 
 
@@ -32,37 +47,39 @@ class TestDetectBeatsPlpDispatch:
         """
         detect_beats() must use librosa.beat.plp() for beat extraction.
         librosa.beat.beat_track() must NOT be called at all (D-07: plp() locked decision).
+
+        Note: We do NOT mock librosa.beat.beat_track because patching it triggers
+        librosa.beat module re-import which fails when librosa.feature.tempo is already
+        mocked (decorator tries to set __qualname__ on a MagicMock). Instead, we use
+        unittest.mock.spy on beat_track via patch.object, which wraps the real object.
         """
         audio = np.zeros(22050, dtype=np.float32)
         sr = 22050
 
-        # Build a realistic PLP pulse curve that produces several local maxima
-        # pulse has shape (n_frames,); we need localmax to find beat positions
         n_frames = 100
         pulse = np.zeros(n_frames, dtype=np.float32)
-        # Place peaks at frames 10, 20, 30, 40, 50 (5 beats)
         for frame in [10, 20, 30, 40, 50]:
             pulse[frame] = 1.0
 
-        # Frame-level tempo array returned by librosa.feature.tempo(aggregate=None)
         tempo_frames = np.full(n_frames, 120.0, dtype=np.float32)
-
-        # Onset envelope
         oenv = np.ones(n_frames, dtype=np.float32)
 
-        with patch('librosa.onset.onset_strength', return_value=oenv) as mock_oenv, \
+        with patch('librosa.onset.onset_strength', return_value=oenv), \
              patch('librosa.feature.tempo', return_value=tempo_frames) as mock_tempo, \
              patch('librosa.beat.plp', return_value=pulse) as mock_plp, \
-             patch('librosa.beat.beat_track') as mock_beat_track, \
-             patch('librosa.util.localmax', return_value=np.array([False]*9 + [True] + [False]*9 + [True] + [False]*9 + [True] + [False]*9 + [True] + [False]*9 + [True] + [False]*(n_frames - 51))) as mock_localmax, \
+             patch.object(librosa.beat, 'beat_track', wraps=librosa.beat.beat_track) as mock_beat_track, \
+             patch('librosa.util.localmax', return_value=np.array(
+                 [False]*9 + [True] + [False]*9 + [True] + [False]*9 + [True] +
+                 [False]*9 + [True] + [False]*9 + [True] + [False]*(n_frames - 51)
+             )), \
              patch('librosa.frames_to_time', return_value=np.array([0.5, 1.0, 1.5, 2.0, 2.5])):
 
             result = detect_beats(audio, sr=sr)
 
-        # plp() must be called
+        # plp() must be called (D-07)
         assert mock_plp.called, "librosa.beat.plp() was not called — detect_beats() must use plp()"
 
-        # beat_track() must NOT be called (D-07: plp() only)
+        # beat_track() must NOT be called (D-07: plp() only, not beat_track())
         assert not mock_beat_track.called, (
             "librosa.beat.beat_track() was called — detect_beats() must use plp() only, "
             "not beat_track()"
