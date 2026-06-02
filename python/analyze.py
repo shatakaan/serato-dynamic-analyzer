@@ -254,7 +254,7 @@ def pack_beatgrid(
 
     Binary layout (all multi-byte values are big-endian per CR-1, D-12):
       [version: 2 bytes = \x01\x00]
-      [count:   2 bytes = uint16 BE, number of non-terminal markers]
+      [count:   4 bytes = uint32 BE, TOTAL markers = len(non_terminal) + 1 (terminal)]
       [non-terminal marker 0: 8 bytes = >f position + >I beats_till_next] * N
       [terminal marker: 8 bytes = >f position + >f bpm]
       [footer: 1 byte = GEOB_FOOTER]
@@ -280,9 +280,9 @@ def pack_beatgrid(
             "both non_terminal_markers=[] and terminal_marker=None is invalid."
         )
 
-    # Header: version (2 bytes) + count of non-terminal markers (uint16 BE, 2 bytes)
+    # Header: version (2 bytes) + total marker count including terminal (uint32 BE, 4 bytes)
     buf = bytearray(b'\x01\x00')
-    buf += struct.pack('>H', len(non_terminal_markers))
+    buf += struct.pack('>I', len(non_terminal_markers) + 1)
 
     # Non-terminal markers: position as big-endian f32, beats_till_next as big-endian u32
     for position, beats_till_next in non_terminal_markers:
@@ -305,8 +305,8 @@ def decode_beatgrid(data: bytes) -> tuple[list[tuple[float, int]], tuple[float, 
 
     The format does not self-describe the marker count, so this function
     determines the count from the byte length:
-      total_bytes = 2 (version) + 2 (count uint16) + N * 8 (non-terminal) + 8 (terminal) + 1 (footer)
-      N = read from bytes [2:4] as uint16 BE
+      total_bytes = 2 (version) + 4 (count uint32) + N * 8 (non-terminal) + 8 (terminal) + 1 (footer)
+      count = read from bytes [2:6] as uint32 BE = total markers including terminal
 
     Args:
         data: bytes, the complete GEOB binary payload (including header and footer).
@@ -319,23 +319,27 @@ def decode_beatgrid(data: bytes) -> tuple[list[tuple[float, int]], tuple[float, 
     Raises:
         ValueError: If the data is too short, has wrong length, or footer is wrong.
     """
-    if len(data) < 13:
+    if len(data) < 15:
         raise ValueError(
-            f"GEOB data too short: {len(data)} bytes (minimum 13: 4 header + 8 terminal + 1 footer)"
+            f"GEOB data too short: {len(data)} bytes (minimum 15: 6 header + 8 terminal + 1 footer)"
         )
 
     # Verify version bytes
     if data[0:2] != b'\x01\x00':
         raise ValueError(f"GEOB version bytes wrong: {data[0:2].hex()} (expected 0100)")
 
-    # Read count of non-terminal markers from header
-    n_non_terminal = struct.unpack('>H', data[2:4])[0]
+    # Read total marker count (includes terminal) as uint32 BE
+    total_markers = struct.unpack('>I', data[2:6])[0]
+    if total_markers < 1:
+        raise ValueError(f"GEOB marker count {total_markers} invalid: must be >= 1 (terminal required)")
+
+    n_non_terminal = total_markers - 1  # last marker is always terminal
 
     # Validate total length
-    expected_len = 4 + n_non_terminal * 8 + 8 + 1
+    expected_len = 6 + total_markers * 8 + 1
     if len(data) != expected_len:
         raise ValueError(
-            f"GEOB data length {len(data)} inconsistent with count={n_non_terminal}: "
+            f"GEOB data length {len(data)} inconsistent with total_markers={total_markers}: "
             f"expected {expected_len} bytes"
         )
 
@@ -345,7 +349,7 @@ def decode_beatgrid(data: bytes) -> tuple[list[tuple[float, int]], tuple[float, 
             f"GEOB footer wrong: {data[-1:].hex()} (expected {GEOB_FOOTER.hex()})"
         )
 
-    offset = 4  # skip version (2) + count (2)
+    offset = 6  # skip version (2) + count (4)
 
     # Parse non-terminal markers
     non_terminal = []
