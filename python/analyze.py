@@ -25,6 +25,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -608,9 +609,170 @@ def atomic_write_geob(
 # CLI Entry Point (Phase 1 interface per D-04 through D-06)
 # ---------------------------------------------------------------------------
 
-def _emit(event: dict) -> None:
-    """Emit a JSONL event to stdout (line-flushed for pipe buffering)."""
+# ---------------------------------------------------------------------------
+# JSONL Emission (D-05, D-06, T-04-02)
+# These are the ONLY functions that write to stdout.
+# All other output (diagnostics, timing, warnings) goes to sys.stderr.
+# ---------------------------------------------------------------------------
+
+def emit_json(event: dict) -> None:
+    """
+    Emit a JSONL event to stdout.
+
+    This is the sole stdout writer in analyze.py (T-04-02 mitigation).
+    All other output MUST go to sys.stderr. flush=True ensures Swift's
+    FileHandle.readabilityHandler receives lines in real time (D-05).
+    """
     print(json.dumps(event), flush=True)
+
+
+def emit_progress(file_path: str, pct: int) -> None:
+    """Emit a progress event per D-06 JSONL schema."""
+    emit_json({"type": "progress", "file": file_path, "pct": pct})
+
+
+def emit_result(
+    file_path: str,
+    bpm_min: float,
+    bpm_max: float,
+    marker_count: int,
+    duration_sec: float,
+) -> None:
+    """Emit a result event per D-06 JSONL schema."""
+    emit_json({
+        "type": "result",
+        "file": file_path,
+        "bpm_min": round(bpm_min, 2),
+        "bpm_max": round(bpm_max, 2),
+        "marker_count": marker_count,
+        "duration_sec": round(duration_sec, 2),
+    })
+
+
+def emit_error(file_path: str, msg: str) -> None:
+    """Emit an error event per D-06 JSONL schema."""
+    emit_json({"type": "error", "file": file_path, "msg": msg})
+
+
+def _emit(event: dict) -> None:
+    """Emit a JSONL event to stdout (line-flushed for pipe buffering).
+
+    Kept for backward compatibility. New code should use emit_json().
+    """
+    emit_json(event)
+
+
+def analyze_track(path: "Path | str", bpm_min: int = 60, bpm_max: int = 200) -> int:
+    """
+    Full analysis pipeline orchestrator.
+
+    Chains: load_audio → detect_beats → encode_markers → pack_beatgrid → atomic_write_geob.
+    Emits JSONL progress/result/error events on stdout; logs timing to stderr.
+
+    Args:
+        path: Path to the audio file (MP3, AIFF, WAV).
+        bpm_min: Minimum BPM hint for tempo estimation. Default 60.
+        bpm_max: Maximum BPM hint for tempo estimation. Default 200.
+
+    Returns:
+        0 on success, 1 on any failure.
+
+    Security (T-04-01): Path is resolved and validated against ALLOWED_EXTENSIONS
+    before any I/O. Unsupported extensions return exit code 1 with an error event.
+    """
+    t_start = time.perf_counter()
+
+    path = Path(path)
+    path_str = str(path)
+
+    # T-04-01: Validate path before any I/O
+    resolved = path.resolve()
+    if not resolved.is_file():
+        emit_error(path_str, f"Path is not a file: {resolved}")
+        return 1
+    if resolved.suffix.lower() not in ALLOWED_EXTENSIONS:
+        emit_error(
+            path_str,
+            f"Unsupported file extension: {resolved.suffix!r}. "
+            f"Allowed: {sorted(ALLOWED_EXTENSIONS)}"
+        )
+        return 1
+
+    # Step 1: Load audio (10%)
+    emit_progress(path_str, 10)
+    try:
+        audio, sr = load_audio(resolved)
+    except Exception as exc:
+        emit_error(path_str, f"Audio loading failed: {exc}")
+        return 1
+
+    # Step 2: Detect beats (30%)
+    emit_progress(path_str, 30)
+    try:
+        beat_positions = detect_beats(audio, sr, bpm_min=bpm_min, bpm_max=bpm_max)
+    except ValueError as exc:
+        emit_error(path_str, f"Beat detection failed: {exc}")
+        return 1
+    except Exception as exc:
+        emit_error(path_str, f"Beat detection error: {exc}")
+        return 1
+
+    # Step 3: Encode markers (60%)
+    emit_progress(path_str, 60)
+    try:
+        non_terminal, terminal = encode_markers(beat_positions)
+    except Exception as exc:
+        emit_error(path_str, f"Marker encoding failed: {exc}")
+        return 1
+
+    # Step 4: Pack GEOB and write atomically (80%)
+    emit_progress(path_str, 80)
+    try:
+        geob_bytes = pack_beatgrid(non_terminal, terminal, GEOB_FOOTER)
+        write_fn = _select_write_fn(resolved)
+        atomic_write_geob(resolved, write_fn, geob_bytes)
+    except Exception as exc:
+        emit_error(path_str, f"GEOB write failed: {exc}")
+        return 1
+
+    # Step 5: Done (100%)
+    emit_progress(path_str, 100)
+
+    # Compute BPM range from beat intervals
+    if len(beat_positions) >= 2:
+        local_bpms = [
+            60.0 / (beat_positions[i + 1] - beat_positions[i])
+            for i in range(len(beat_positions) - 1)
+        ]
+        bpm_min_val = min(local_bpms)
+        bpm_max_val = max(local_bpms)
+    else:
+        bpm_min_val = bpm_max_val = 0.0
+
+    # Compute elapsed and log to stderr (not stdout — T-04-02)
+    elapsed = time.perf_counter() - t_start
+    print(
+        f"[analyze.py] {resolved.name}: elapsed={elapsed:.2f}s startup+analysis",
+        file=sys.stderr,
+        flush=True,
+    )
+    if elapsed > 2.0:
+        print(
+            "[analyze.py] WARNING: elapsed > 2s — consider persistent worker process for Phase 2",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    # Emit result event (stdout JSONL)
+    duration_sec = float(audio.shape[0]) / sr
+    emit_result(
+        path_str,
+        bpm_min=bpm_min_val,
+        bpm_max=bpm_max_val,
+        marker_count=len(non_terminal) + 1,  # +1 for terminal marker
+        duration_sec=duration_sec,
+    )
+    return 0
 
 
 def _resolve_path(arg: str) -> Path:
@@ -779,4 +941,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    import argparse as _argparse
+    _parser = _argparse.ArgumentParser(description='Serato Dynamic BPM Analyzer')
+    _parser.add_argument('file', type=str, help='Audio file to analyze (MP3, AIFF, WAV)')
+    _parser.add_argument('--bpm-min', type=int, default=60, help='Minimum BPM (default 60)')
+    _parser.add_argument('--bpm-max', type=int, default=200, help='Maximum BPM (default 200)')
+    _args = _parser.parse_args()
+    sys.exit(analyze_track(Path(_args.file), _args.bpm_min, _args.bpm_max))
