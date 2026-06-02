@@ -22,10 +22,15 @@ import math
 import os
 import shutil
 import struct
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Callable
+
+import imageio_ffmpeg
+import numpy as np
+import soundfile
 
 # ---------------------------------------------------------------------------
 # Module-level constants
@@ -44,6 +49,92 @@ GEOB_FOOTER: bytes = b'\x00'
 
 # Allowed file extensions for CLI path validation (T-01-03 mitigation)
 ALLOWED_EXTENSIONS: frozenset = frozenset({'.mp3', '.aiff', '.aif', '.wav'})
+
+# Supported extensions for load_audio() format dispatch (D-01, D-02, D-03, T-02-01)
+# M4A is explicitly deferred to Phase 5 (FMT-04, FMT-05).
+SUPPORTED_EXTENSIONS: set[str] = {'.mp3', '.aiff', '.aif', '.wav'}
+
+
+# ---------------------------------------------------------------------------
+# Audio Loading
+# ---------------------------------------------------------------------------
+
+def load_audio(path: "Path | str") -> "tuple[np.ndarray, int]":
+    """
+    Load an audio file and return a float32 mono array at 22050 Hz.
+
+    Dispatch rules (D-01, D-02, D-03):
+      - MP3  (.mp3):        ffmpeg → WAV pipe → soundfile.read(BytesIO)
+      - AIFF (.aiff/.aif):  soundfile.read() directly (libsndfile handles AIFF natively)
+      - WAV  (.wav):        soundfile.read() directly
+
+    Security mitigations (T-02-01, T-02-03):
+      - Path.resolve() expands symlinks before use
+      - Suffix validated against SUPPORTED_EXTENSIONS before any I/O
+      - subprocess.run cmd is always a list — no shell=True, no shell interpolation
+
+    Args:
+        path: Path to the audio file (str or Path).
+
+    Returns:
+        Tuple of (audio_float32_mono, sample_rate_int).
+        Sample rate is always 22050 Hz (downsampled if needed for AIFF/WAV,
+        forced to 22050 via ffmpeg -ar flag for MP3).
+
+    Raises:
+        ValueError: If the file extension is not in SUPPORTED_EXTENSIONS
+                    (raised before any I/O — M4A, FLAC, etc. are unsupported in Phase 1).
+        RuntimeError: If the ffmpeg subprocess returns a non-zero exit code (MP3 branch).
+    """
+    path = Path(path).resolve()
+
+    # T-02-01: Validate suffix before any I/O — unsupported formats raise immediately
+    if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        raise ValueError(
+            f"Unsupported format: {path.suffix!r} — {path.name}. "
+            f"Supported: {sorted(SUPPORTED_EXTENSIONS)}"
+        )
+
+    if path.suffix.lower() == '.mp3':
+        # D-01, D-02: MP3 loading pipeline — ffmpeg via imageio_ffmpeg → WAV pipe → soundfile
+        # imageio_ffmpeg ships a pre-built static ffmpeg binary; never hardcode a path.
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+
+        # -ar 22050: downsample to librosa default (reduces memory per MR-1 mitigation)
+        # -ac 1: force mono from ffmpeg itself (belt-and-suspenders before soundfile.read)
+        # T-02-03: cmd is a list — no shell=True, no shell interpolation of path
+        cmd = [ffmpeg_exe, '-i', str(path), '-f', 'wav', '-ar', '22050', '-ac', '1', 'pipe:1']
+        proc = subprocess.run(cmd, capture_output=True)
+
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"ffmpeg failed for {path}: "
+                f"{proc.stderr.decode(errors='replace')[:500]}"
+            )
+
+        audio, sr = soundfile.read(io.BytesIO(proc.stdout), dtype='float32')
+
+        # Belt-and-suspenders: -ac 1 already forces mono, but downmix if needed
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+
+        return audio, int(sr)
+
+    else:
+        # D-03: AIFF and WAV — soundfile handles them natively via libsndfile
+        audio, sr = soundfile.read(str(path), dtype='float32', always_2d=False)
+
+        # Downmix stereo/multichannel to mono
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+
+        # Resample to 22050 Hz if needed (matches MP3 branch; reduces memory per MR-1)
+        if sr != 22050:
+            import librosa
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=22050)
+            sr = 22050
+
+        return audio, int(sr)
 
 
 # ---------------------------------------------------------------------------
