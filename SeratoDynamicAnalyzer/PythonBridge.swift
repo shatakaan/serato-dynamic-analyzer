@@ -36,11 +36,9 @@ actor PythonBridge {
 
         var env = ProcessInfo.processInfo.environment
         env["PYTHONUNBUFFERED"] = "1"
-        // PYTHONHOME tells Python where its standard library lives
-        if let resourcePath = Bundle.main.resourcePath {
-            let pythonHome = resourcePath + "/python-runtime/Python.framework/Versions/3.12"
-            env["PYTHONHOME"] = pythonHome
-        }
+        // PYTHONHOME is intentionally NOT set: the --copies venv binary resolves
+        // its own home from its executable path via pyvenv.cfg — setting PYTHONHOME
+        // would override that and break stdlib discovery.
         p.environment = env
 
         p.terminationHandler = { [weak self] proc in
@@ -156,13 +154,14 @@ actor PythonBridge {
         guard let resourcePath = Bundle.main.resourcePath else {
             throw BridgeError.bundlePathUnavailable
         }
+        // Path matches Makefile bundle-python target:
+        // Resources/python-runtime/venv/bin/python3.11
+        // The venv is built with --copies so this is a real executable, not a symlink.
         let pythonURL = URL(fileURLWithPath: resourcePath)
             .appendingPathComponent("python-runtime")
-            .appendingPathComponent("Python.framework")
-            .appendingPathComponent("Versions")
-            .appendingPathComponent("3.12")
+            .appendingPathComponent("venv")
             .appendingPathComponent("bin")
-            .appendingPathComponent("python3")
+            .appendingPathComponent("python3.11")
         guard FileManager.default.fileExists(atPath: pythonURL.path) else {
             throw BridgeError.pythonBinaryNotFound(path: pythonURL.path)
         }

@@ -1,14 +1,19 @@
 # Serato Dynamic Analyzer — Release Build Pipeline
 #
 # Usage:
-#   make release        — Full pipeline: download + venv + build + sign + DMG
+#   make release        — Full pipeline: venv + build + sign + DMG
 #   make deps           — Install build tools (uv via Homebrew if not present)
-#   make bundle-python  — Embed Python.framework + venv + analyze.py into .app
+#   make bundle-python  — Embed Python venv + analyze.py into .app
 #   make bundle-swift   — Build Swift app via xcodebuild (Release, ad-hoc signed)
-#   make sign           — Ad-hoc code sign bottom-up (.so/.dylib → framework → .app)
+#   make sign           — Ad-hoc code sign bottom-up (.so/.dylib → outer .app)
 #   make dmg            — Package .app into distributable DMG
-#   make clean          — Remove .app, derived data, .dmg (keeps BeeWare cache + venv)
+#   make clean          — Remove .app, derived data, .dmg (keeps venv cache)
 #   make distclean      — Remove all of build/
+#
+# Python source: Homebrew Python 3.11 with --copies venv so the binary is a real
+# copy (not a symlink). When the venv is moved inside the .app bundle, Python finds
+# its pyvenv.cfg two levels above the binary and correctly activates site-packages.
+# Works on the developer's Mac where Homebrew is installed. (Phase 2 dev build)
 
 APP_NAME         := SeratoDynamicAnalyzer
 APP              := build/$(APP_NAME).app
@@ -16,14 +21,14 @@ BUNDLE_RESOURCES := $(APP)/Contents/Resources
 PYTHON_RUNTIME   := $(BUNDLE_RESOURCES)/python-runtime
 SCRIPTS_DIR      := $(BUNDLE_RESOURCES)/scripts
 
-# BeeWare Python 3.12-b8 (macOS, pre-relocated — no install_name_tool needed)
-BEEWARE_URL := https://github.com/beeware/Python-Apple-support/releases/download/3.12-b8/Python-3.12-macOS-support.b8.tar.gz
-BEEWARE_TAR := build/cache/Python-3.12-macOS-support.b8.tar.gz
+# Homebrew Python 3.11 — provides a real subprocess-callable python binary.
+# BeeWare Python.xcframework was tried but ships no bin/python3 executable.
+BREW_PYTHON := /opt/homebrew/opt/python@3.11/bin/python3.11
 
-# Xcode.app is required for xcodebuild (CLT alone is insufficient — see STATE.md D-02-03)
+# Xcode.app required for xcodebuild (CLT alone is insufficient)
 DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 
-# Entitlements file path (D-13: allow-unsigned-executable-memory + disable-library-validation)
+# Entitlements (D-13: allow-unsigned-executable-memory + disable-library-validation)
 ENTITLEMENTS := SeratoDynamicAnalyzer/Resources/SeratoDynamicAnalyzer.entitlements
 
 .PHONY: release deps bundle-python bundle-swift sign dmg clean distclean
@@ -38,66 +43,37 @@ release: deps bundle-python bundle-swift sign dmg
 # ──────────────────────────────────────────────────────────────────────────────
 deps:
 	which uv || brew install uv
-	@echo "deps OK — uv present"
+	@test -f "$(BREW_PYTHON)" || (echo "ERROR: Homebrew Python 3.11 not found at $(BREW_PYTHON). Run: brew install python@3.11" && exit 1)
+	@echo "deps OK — uv and Python 3.11 present"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# BeeWare tarball download (file rule — runs only once, cached in build/cache/)
+# Create relocatable venv with --copies so python3.11 binary is a real copy.
+# A copied binary correctly resolves pyvenv.cfg when moved inside .app bundle.
+# File rule — reruns only if venv dir does not exist.
 # ──────────────────────────────────────────────────────────────────────────────
-$(BEEWARE_TAR):
-	mkdir -p build/cache
-	curl -L "$(BEEWARE_URL)" -o "$(BEEWARE_TAR)"
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Extract Python.framework from BeeWare tarball (file rule — cached)
-# Layout after extraction: build/python-runtime/Python.framework/Versions/3.12/bin/python3
-# This matches the path used in PythonBridge.pythonBinaryURL().
-# ──────────────────────────────────────────────────────────────────────────────
-build/python-runtime/Python.framework: $(BEEWARE_TAR)
+build/python-runtime/venv:
 	mkdir -p build/python-runtime
-	tar -xzf "$(BEEWARE_TAR)" -C build/python-runtime
-	@echo "BeeWare layout:"
-	@ls build/python-runtime/
-	@echo "Python binary check:"
-	@ls build/python-runtime/Python.framework/Versions/3.12/bin/python3 2>/dev/null \
-	    && echo "python3 found at expected path" \
-	    || (echo "WARNING: python3 not at expected path — check build/python-runtime/ layout and update PythonBridge.swift"; ls -R build/python-runtime/ | head -40)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Create relocatable venv and install Python dependencies (file rule — cached)
-# ──────────────────────────────────────────────────────────────────────────────
-build/python-runtime/venv: build/python-runtime/Python.framework
-	uv venv --relocatable \
-	    --python build/python-runtime/Python.framework/Versions/3.12/bin/python3 \
-	    build/python-runtime/venv \
-	|| ( \
-	    echo "uv --relocatable failed; falling back to venv --copies"; \
-	    build/python-runtime/Python.framework/Versions/3.12/bin/python3 \
-	        -m venv --copies build/python-runtime/venv \
-	)
+	"$(BREW_PYTHON)" -m venv --copies build/python-runtime/venv
 	uv pip install -r python/requirements.txt \
-	    --python build/python-runtime/venv/bin/python3
+	    --python build/python-runtime/venv/bin/python3.11
+	@echo "venv: Python 3.11 venv with all dependencies created"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# bundle-python: Copy Python.framework + venv site-packages + analyze.py into .app
+# bundle-python: Copy venv + analyze.py into .app Resources
+# Layout: Resources/python-runtime/venv/bin/python3.11  (matches PythonBridge path)
+#         Resources/scripts/analyze.py
 # ──────────────────────────────────────────────────────────────────────────────
-bundle-python: build/python-runtime/Python.framework build/python-runtime/venv
+bundle-python: build/python-runtime/venv
 	rm -rf "$(PYTHON_RUNTIME)"
 	mkdir -p "$(PYTHON_RUNTIME)"
-	# Copy BeeWare Python.framework (already relocatable — no install_name_tool needed)
-	cp -R build/python-runtime/Python.framework "$(PYTHON_RUNTIME)/"
-	# Merge venv site-packages into the framework's site-packages
-	cp -R build/python-runtime/venv/lib/python3.12/site-packages/. \
-	      "$(PYTHON_RUNTIME)/Python.framework/Versions/3.12/lib/python3.12/site-packages/"
-	# Copy analyze.py to scripts/
+	cp -R build/python-runtime/venv "$(PYTHON_RUNTIME)/venv"
 	mkdir -p "$(SCRIPTS_DIR)"
 	cp python/analyze.py "$(SCRIPTS_DIR)/"
-	# Ensure python3 binary is executable
-	chmod +x "$(PYTHON_RUNTIME)/Python.framework/Versions/3.12/bin/python3"
-	@echo "bundle-python: Python runtime embedded"
+	chmod +x "$(PYTHON_RUNTIME)/venv/bin/python3.11"
+	@echo "bundle-python: venv + analyze.py embedded"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # bundle-swift: Build Swift app via xcodebuild, copy .app into build/
-# Requires Xcode.app at /Applications/Xcode.app (D-02-03 confirmed)
 # ──────────────────────────────────────────────────────────────────────────────
 bundle-swift:
 	DEVELOPER_DIR="$(DEVELOPER_DIR)" xcodebuild clean build \
@@ -119,17 +95,11 @@ bundle-swift:
 
 # ──────────────────────────────────────────────────────────────────────────────
 # sign: Bottom-up ad-hoc code signing (D-12, D-13, CLAUDE.md signing order)
-# Order: 1) all .so/.dylib  2) Python.framework  3) outer .app
-# No --timestamp flag needed for ad-hoc signing (timestamps are for Developer ID only)
+# Order: 1) all .so/.dylib in venv  2) outer .app with entitlements
 # ──────────────────────────────────────────────────────────────────────────────
 sign:
-	# 1. Sign all .so and .dylib files inside python-runtime (bottom layer first)
-	find "$(PYTHON_RUNTIME)" \( -name "*.dylib" -o -name "*.so" \) \
+	find "$(PYTHON_RUNTIME)/venv" \( -name "*.dylib" -o -name "*.so" \) \
 	    | xargs -I{} codesign --force --sign - --options runtime "{}"
-	# 2. Sign Python.framework as a unit
-	codesign --force --sign - --options runtime \
-	    "$(PYTHON_RUNTIME)/Python.framework"
-	# 3. Sign the outer .app with entitlements (D-13: allow-unsigned-executable-memory + disable-library-validation)
 	codesign --force --sign - --options runtime \
 	    --entitlements "$(ENTITLEMENTS)" \
 	    "$(APP)"
@@ -147,14 +117,14 @@ dmg:
 	@echo "dmg: build/$(APP_NAME).dmg created"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# clean: Remove build artifacts (keeps BeeWare cache + python-runtime venv)
+# clean: Remove build artifacts (keeps venv cache at build/python-runtime/venv)
 # ──────────────────────────────────────────────────────────────────────────────
 clean:
 	rm -rf "build/$(APP_NAME).app" build/derived "build/$(APP_NAME).dmg" build/xcodebuild.log
-	@echo "clean: build artifacts removed (BeeWare cache preserved)"
+	@echo "clean: build artifacts removed (venv cache preserved)"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# distclean: Full clean including BeeWare cache and venv
+# distclean: Full clean including venv cache
 # ──────────────────────────────────────────────────────────────────────────────
 distclean:
 	rm -rf build/
