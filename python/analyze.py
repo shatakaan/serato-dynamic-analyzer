@@ -193,17 +193,19 @@ def detect_beats(
     # Step 1: Onset envelope (input to both tempo estimation and plp())
     oenv = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=hop_length)
 
-    # Step 2: Frame-level tempo — aggregate=None returns per-frame BPM array (D-07)
-    # This is the variable-tempo API: each frame gets its own BPM estimate.
-    # The result is not passed directly to plp(); its purpose is to confirm the
-    # variable-tempo estimation step runs (D-07 locked decision: aggregate=None required).
-    # Future callers (e.g. logging, confidence scoring) may use this array.
-    librosa.feature.tempo(
+    # Step 2: Frame-level tempo — aggregate=None returns per-frame BPM array (D-07).
+    # Use 5th/95th percentile of the per-frame distribution to tighten plp() bounds,
+    # so the pulse tracker is driven by what the track actually contains.
+    tempo_frames = librosa.feature.tempo(
         onset_envelope=oenv,
         sr=sr,
         hop_length=hop_length,
         aggregate=None,
     )
+    plp_bpm_min = float(np.clip(np.percentile(tempo_frames, 5), bpm_min, bpm_max))
+    plp_bpm_max = float(np.clip(np.percentile(tempo_frames, 95), bpm_min, bpm_max))
+    if plp_bpm_min >= plp_bpm_max:  # degenerate (constant-tempo track)
+        plp_bpm_min, plp_bpm_max = float(bpm_min), float(bpm_max)
 
     # Step 3: Predominant Local Pulse — variable-tempo beat extraction (D-07)
     # win_length=384: window in frames for PLP computation (bvandrc/serato-tools baseline)
@@ -212,8 +214,8 @@ def detect_beats(
         sr=sr,
         hop_length=hop_length,
         win_length=384,
-        tempo_min=bpm_min,
-        tempo_max=bpm_max,
+        tempo_min=plp_bpm_min,
+        tempo_max=plp_bpm_max,
     )
 
     # Step 4: Extract beat frames — local maxima of the PLP pulse curve
@@ -419,8 +421,13 @@ def encode_markers(
             last_marker_idx = i
             last_marker_bpm = current_bpm
 
-    # The terminal marker is always the last beat position
+    # Always emit the final segment from last_marker_idx to the terminal.
+    # Without this, the last tempo region has no non-terminal marker, causing
+    # Serato to misalign the grid past the last BPM change.
     last_idx = len(beats) - 1
+    non_terminal.append((beats[last_marker_idx], last_idx - last_marker_idx))
+
+    # The terminal marker is always the last beat position
     # BPM at the terminal = local BPM from second-to-last to last beat
     if len(beats) >= 2:
         gap = beats[-1] - beats[-2]
@@ -654,12 +661,6 @@ def emit_error(file_path: str, msg: str) -> None:
     emit_json({"type": "error", "file": file_path, "msg": msg})
 
 
-def _emit(event: dict) -> None:
-    """Emit a JSONL event to stdout (line-flushed for pipe buffering).
-
-    Kept for backward compatibility. New code should use emit_json().
-    """
-    emit_json(event)
 
 
 def analyze_track(path: "Path | str", bpm_min: int = 60, bpm_max: int = 200) -> int:
@@ -804,140 +805,6 @@ def _select_write_fn(path: Path) -> Callable[[Path, bytes], None]:
     else:
         raise ValueError(f"No write function for extension: {ext!r}")
 
-
-def main(argv: list[str] | None = None) -> int:
-    """
-    CLI entry point. Usage: python analyze.py <audio_file> [--bpm-min 60] [--bpm-max 200]
-    Returns 0 on success, 1 on error.
-    """
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description='Serato Dynamic Analyzer — writes dynamic beatgrid GEOB tags'
-    )
-    parser.add_argument('file', help='Audio file path (MP3, AIFF, WAV)')
-    parser.add_argument('--bpm-min', type=float, default=60.0, help='Minimum BPM hint')
-    parser.add_argument('--bpm-max', type=float, default=200.0, help='Maximum BPM hint')
-    args = parser.parse_args(argv)
-
-    try:
-        target_path = _resolve_path(args.file)
-    except ValueError as e:
-        _emit({'type': 'error', 'file': args.file, 'msg': str(e)})
-        return 1
-
-    _emit({'type': 'progress', 'file': str(target_path), 'pct': 0})
-
-    try:
-        # Import librosa here (heavy import — only load when needed)
-        import librosa
-        import numpy as np
-
-        _emit({'type': 'progress', 'file': str(target_path), 'pct': 5})
-
-        # Audio loading (D-02, D-03)
-        ext = target_path.suffix.lower()
-        if ext == '.mp3':
-            # MP3: ffmpeg → wav pipe → soundfile (D-02)
-            import imageio_ffmpeg
-            import soundfile
-            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-            import subprocess
-            result = subprocess.run(
-                [ffmpeg_exe, '-i', str(target_path), '-f', 'wav', '-'],
-                capture_output=True,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"ffmpeg failed (exit {result.returncode}): "
-                    f"{result.stderr.decode(errors='replace')[:500]}"
-                )
-            y, sr = soundfile.read(io.BytesIO(result.stdout), dtype='float32')
-            if y.ndim > 1:
-                y = y.mean(axis=1)  # Downmix to mono
-        else:
-            # AIFF/WAV: soundfile handles natively (D-03)
-            y, sr = librosa.load(str(target_path), sr=None, mono=True)
-
-        _emit({'type': 'progress', 'file': str(target_path), 'pct': 20})
-
-        # Beat tracking: plp() for variable-tempo (D-07, HR-3)
-        # Step 1: frame-level tempo estimation
-        tempo_frames = librosa.feature.tempo(
-            y=y, sr=sr, aggregate=None,
-            prior=librosa.rhythm.tempo_frequencies(
-                n_tempo=180, sr=sr,
-            ) if hasattr(librosa.rhythm, 'tempo_frequencies') else None,
-        )
-
-        _emit({'type': 'progress', 'file': str(target_path), 'pct': 40})
-
-        # Step 2: predominant local pulse (variable tempo beat tracking)
-        pulse = librosa.beat.plp(y=y, sr=sr, tempo_min=args.bpm_min, tempo_max=args.bpm_max)
-        beat_frames = librosa.util.peak_pick(
-            pulse, pre_max=3, post_max=3, pre_avg=3, post_avg=5, delta=0.1, wait=10
-        )
-        beat_times = librosa.frames_to_time(beat_frames, sr=sr)
-
-        _emit({'type': 'progress', 'file': str(target_path), 'pct': 65})
-
-        # Apply onset offset correction (HR-4, ONSET_OFFSET_SECONDS)
-        beat_times = [max(0.0, t - ONSET_OFFSET_SECONDS) for t in beat_times.tolist()]
-
-        # Refuse to write if too few beats (D-08, HR-3)
-        if len(beat_times) < 4:
-            _emit({
-                'type': 'error',
-                'file': str(target_path),
-                'msg': (
-                    f"Too few beats detected: {len(beat_times)} "
-                    f"(minimum 4 required, D-08). Track may have no clear rhythm."
-                )
-            })
-            return 1
-
-        _emit({'type': 'progress', 'file': str(target_path), 'pct': 75})
-
-        # Encode markers (consolidation + 128-marker limit)
-        non_terminal, terminal = encode_markers(beat_times)
-
-        # Pack the GEOB payload
-        geob_bytes = pack_beatgrid(
-            non_terminal_markers=non_terminal,
-            terminal_marker=terminal,
-            footer_byte=GEOB_FOOTER,
-        )
-
-        _emit({'type': 'progress', 'file': str(target_path), 'pct': 90})
-
-        # Write atomically using per-format write function
-        write_fn = _select_write_fn(target_path)
-        atomic_write_geob(target_path, write_fn, geob_bytes)
-
-        # Calculate duration and BPM range for result event
-        duration_sec = float(len(y)) / sr
-        bpm_values = [60.0 / (beat_times[i+1] - beat_times[i])
-                      for i in range(len(beat_times) - 1)]
-        bpm_min_actual = min(bpm_values) if bpm_values else 0.0
-        bpm_max_actual = max(bpm_values) if bpm_values else 0.0
-
-        _emit({'type': 'progress', 'file': str(target_path), 'pct': 100})
-        _emit({
-            'type': 'result',
-            'file': str(target_path),
-            'bpm_min': round(bpm_min_actual, 1),
-            'bpm_max': round(bpm_max_actual, 1),
-            'marker_count': len(non_terminal) + 1,  # +1 for terminal
-            'duration_sec': round(duration_sec, 1),
-        })
-        return 0
-
-    except Exception as e:
-        _emit({'type': 'error', 'file': str(target_path), 'msg': str(e)})
-        print(f"ERROR: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        return 1
 
 
 if __name__ == '__main__':
