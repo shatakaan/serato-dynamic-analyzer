@@ -441,9 +441,11 @@ class TestSubprocessWithAudio:
 
         result = result_events[0]
         required_keys = {'type', 'file', 'bpm_min', 'bpm_max', 'marker_count', 'duration_sec'}
-        assert set(result.keys()) == required_keys, (
-            f"Result event has wrong keys.\n"
-            f"Expected: {required_keys}\n"
+        # Phase 2 adds optional fields (backup_path, dry_run) — check required keys are present,
+        # not exact equality, so the schema test remains valid as the contract evolves.
+        assert required_keys.issubset(set(result.keys())), (
+            f"Result event missing required keys.\n"
+            f"Required: {required_keys}\n"
             f"Got: {set(result.keys())}"
         )
 

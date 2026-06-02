@@ -557,6 +557,29 @@ def write_geob_wav(path: Path, geob_bytes: bytes) -> None:
     wf.tags.save(str(path), v2_version=3)
 
 
+def create_backup(source_path: Path) -> Path:
+    """
+    Create a .serato-backup copy of the source audio file before writing (SAFE-01).
+
+    The backup file is placed in the same directory as the source, with name:
+        {stem}.serato-backup{suffix}
+
+    Uses shutil.copy2 to preserve metadata (mtime, permissions).
+
+    Args:
+        source_path: Path to the source audio file.
+
+    Returns:
+        Path to the created backup file.
+
+    Raises:
+        PermissionError, OSError: propagated to the caller (analyze_track will catch and emit error).
+    """
+    backup_path = source_path.parent / (source_path.stem + ".serato-backup" + source_path.suffix)
+    shutil.copy2(str(source_path), str(backup_path))
+    return backup_path
+
+
 def atomic_write_geob(
     target_path: Path,
     write_fn: Callable[[Path, bytes], None],
@@ -650,16 +673,28 @@ def emit_result(
     bpm_max: float,
     marker_count: int,
     duration_sec: float,
+    backup_path: "str | None" = None,
+    dry_run: bool = False,
 ) -> None:
-    """Emit a result event per D-06 JSONL schema."""
-    emit_json({
+    """Emit a result event per D-06 JSONL schema.
+
+    Optional fields added in Phase 2:
+      backup_path: path to .serato-backup file (present only when dry_run=False and write succeeded)
+      dry_run: True if this was a dry run (no write was performed)
+    """
+    event = {
         "type": "result",
         "file": file_path,
         "bpm_min": round(bpm_min, 2),
         "bpm_max": round(bpm_max, 2),
         "marker_count": marker_count,
         "duration_sec": round(duration_sec, 2),
-    })
+    }
+    if backup_path is not None:
+        event["backup_path"] = backup_path
+    if dry_run:
+        event["dry_run"] = True
+    emit_json(event)
 
 
 def emit_error(file_path: str, msg: str) -> None:
@@ -669,7 +704,12 @@ def emit_error(file_path: str, msg: str) -> None:
 
 
 
-def analyze_track(path: "Path | str", bpm_min: int = 60, bpm_max: int = 200) -> int:
+def analyze_track(
+    path: "Path | str",
+    bpm_min: int = 60,
+    bpm_max: int = 200,
+    dry_run: bool = False,
+) -> int:
     """
     Full analysis pipeline orchestrator.
 
@@ -680,6 +720,8 @@ def analyze_track(path: "Path | str", bpm_min: int = 60, bpm_max: int = 200) -> 
         path: Path to the audio file (MP3, AIFF, WAV).
         bpm_min: Minimum BPM hint for tempo estimation. Default 60.
         bpm_max: Maximum BPM hint for tempo estimation. Default 200.
+        dry_run: If True, analysis runs but no file is written and no backup is created (SAFE-02).
+                 Result event will contain dry_run:true. Default False.
 
     Returns:
         0 on success, 1 on any failure.
@@ -733,11 +775,17 @@ def analyze_track(path: "Path | str", bpm_min: int = 60, bpm_max: int = 200) -> 
         return 1
 
     # Step 4: Pack GEOB and write atomically (80%)
+    # dry_run=True: pack bytes (so result is meaningful) but skip backup + write (SAFE-02)
     emit_progress(path_str, 80)
     try:
         geob_bytes = pack_beatgrid(non_terminal, terminal, GEOB_FOOTER)
-        write_fn = _select_write_fn(resolved)
-        atomic_write_geob(resolved, write_fn, geob_bytes)
+        if not dry_run:
+            backup_path_obj = create_backup(resolved)
+            backup_path_str = str(backup_path_obj)
+            write_fn = _select_write_fn(resolved)
+            atomic_write_geob(resolved, write_fn, geob_bytes)
+        else:
+            backup_path_str = None
     except Exception as exc:
         emit_error(path_str, f"GEOB write failed: {exc}")
         return 1
@@ -778,6 +826,8 @@ def analyze_track(path: "Path | str", bpm_min: int = 60, bpm_max: int = 200) -> 
         bpm_max=bpm_max_val,
         marker_count=len(non_terminal) + 1,  # +1 for terminal marker
         duration_sec=duration_sec,
+        backup_path=backup_path_str,
+        dry_run=dry_run,
     )
     return 0
 
