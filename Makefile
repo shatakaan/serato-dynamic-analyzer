@@ -36,7 +36,7 @@ ENTITLEMENTS := SeratoDynamicAnalyzer/Resources/SeratoDynamicAnalyzer.entitlemen
 # ──────────────────────────────────────────────────────────────────────────────
 # release: One-command pipeline (D-10)
 # ──────────────────────────────────────────────────────────────────────────────
-release: deps bundle-python bundle-swift sign dmg
+release: deps bundle-swift bundle-python sign dmg
 
 # ──────────────────────────────────────────────────────────────────────────────
 # deps: Install build tools — idempotent
@@ -90,6 +90,7 @@ bundle-swift:
 	    echo "BUILD FAILED — see build/xcodebuild.log for details"; \
 	    exit 1; \
 	fi
+	rm -rf "$(APP)"
 	cp -R build/derived/Build/Products/Release/$(APP_NAME).app "$(APP)"
 	@echo "bundle-swift: .app copied to $(APP)"
 
