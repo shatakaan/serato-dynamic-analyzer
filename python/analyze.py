@@ -865,9 +865,45 @@ def _select_write_fn(path: Path) -> Callable[[Path, bytes], None]:
 
 if __name__ == '__main__':
     import argparse as _argparse
+
     _parser = _argparse.ArgumentParser(description='Serato Dynamic BPM Analyzer')
-    _parser.add_argument('file', type=str, help='Audio file to analyze (MP3, AIFF, WAV)')
+    _parser.add_argument(
+        'file',
+        nargs='?',
+        help='Audio file to analyze (MP3, AIFF, WAV) — CLI mode only',
+    )
     _parser.add_argument('--bpm-min', type=int, default=60, help='Minimum BPM (default 60)')
     _parser.add_argument('--bpm-max', type=int, default=200, help='Maximum BPM (default 200)')
+    _parser.add_argument(
+        '--worker',
+        action='store_true',
+        help='Persistent worker mode: read JSON-Lines requests from stdin',
+    )
     _args = _parser.parse_args()
-    sys.exit(analyze_track(Path(_args.file), _args.bpm_min, _args.bpm_max))
+
+    if _args.worker:  # --worker flag present: run as persistent daemon
+        # Eagerly import librosa so the ready signal means "Python env + librosa are loaded"
+        import librosa  # noqa: F401 — eager import; ready signal means warm
+        emit_json({"type": "ready", "version": "1.0"})
+
+        # Worker loop: read one JSON-Lines request per iteration until stdin is closed
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                req = json.loads(line)
+            except json.JSONDecodeError as _e:
+                emit_json({"type": "error", "file": "", "msg": f"Invalid JSON request: {_e}"})
+                continue
+            _file_path = req.get("file", "")
+            _bpm_min = int(req.get("bpm_min", 60))
+            _bpm_max = int(req.get("bpm_max", 200))
+            _dry_run = bool(req.get("dry_run", False))
+            analyze_track(Path(_file_path), bpm_min=_bpm_min, bpm_max=_bpm_max, dry_run=_dry_run)
+    else:
+        # CLI mode — require a file argument
+        if not _args.file:
+            _parser.print_help()
+            sys.exit(1)
+        sys.exit(analyze_track(Path(_args.file), _args.bpm_min, _args.bpm_max))
