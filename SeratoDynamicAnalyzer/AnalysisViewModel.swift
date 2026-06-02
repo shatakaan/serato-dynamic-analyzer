@@ -16,6 +16,9 @@ class AnalysisViewModel: ObservableObject {
     @Published var showSeratoAlert: Bool = false
 
     private let bridge = PythonBridge()
+    /// Set to true before calling startAnalysis() from the Serato alert "Continue Anyway"
+    /// button so the Serato-running check is skipped on that second call (T-02-04-04).
+    var skipSeratoCheck: Bool = false
 
     // MARK: Worker startup (call from .task{} in Scene or ContentView)
 
@@ -45,11 +48,12 @@ class AnalysisViewModel: ObservableObject {
         guard let url = trackURL else { return }
         guard !isRunning else { return }
 
-        // ANAL-04: block write if Serato is open (unless dry run)
-        if !isDryRun && isSeratoRunning() {
+        // ANAL-04: block write if Serato is open (unless dry run or user confirmed)
+        if !isDryRun && !skipSeratoCheck && isSeratoRunning() {
             showSeratoAlert = true
             return
         }
+        skipSeratoCheck = false  // reset after consuming
 
         isRunning = true
         progress = 0.0
