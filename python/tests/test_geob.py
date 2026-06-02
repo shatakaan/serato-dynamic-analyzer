@@ -29,19 +29,22 @@ def test_1_endianness():
     """
     pack_beatgrid with one non-terminal marker (1.5s, 16 beats) and a terminal
     marker (4.5s, 128.0 BPM) must produce:
-    - bytes[0:2] = b'\\x01\\x00' (header)
-    - bytes[2:6] decode as big-endian float32 == 1.5
-    - bytes[6:10] decode as big-endian uint32 == 16
+    - bytes[0:2] = b'\\x01\\x00' (version)
+    - bytes[2:4] = uint16 BE count == 1
+    - bytes[4:8] decode as big-endian float32 == 1.5 (non-terminal position)
+    - bytes[8:12] decode as big-endian uint32 == 16 (beats_till_next)
     """
     data = analyze.pack_beatgrid(
         non_terminal_markers=[(1.5, 16)],
         terminal_marker=(4.5, 128.0),
         footer_byte=analyze.GEOB_FOOTER,
     )
-    assert data[0:2] == b'\x01\x00', f"Header wrong: {data[0:2].hex()}"
-    pos1 = struct.unpack('>f', data[2:6])[0]
+    assert data[0:2] == b'\x01\x00', f"Version bytes wrong: {data[0:2].hex()}"
+    count = struct.unpack('>H', data[2:4])[0]
+    assert count == 1, f"Count field wrong: {count} (expected 1)"
+    pos1 = struct.unpack('>f', data[4:8])[0]
     assert abs(pos1 - 1.5) < 1e-4, f"Position 1 wrong: {pos1}"
-    beats = struct.unpack('>I', data[6:10])[0]
+    beats = struct.unpack('>I', data[8:12])[0]
     assert beats == 16, f"beats_till_next wrong: {beats}"
 
 
@@ -50,17 +53,17 @@ def test_2_terminal_marker_encoding():
     The terminal marker must encode position as big-endian float32 and BPM as
     big-endian float32 — NOT as position + beats_till_next.
     With one non-terminal (1.5s, 16) and terminal (4.5s, 128.0):
-    - bytes[10:14] decode as big-endian float32 == 4.5
-    - bytes[14:18] decode as big-endian float32 == 128.0
+    - bytes[12:16] decode as big-endian float32 == 4.5  (2 version + 2 count + 8 non-terminal)
+    - bytes[16:20] decode as big-endian float32 == 128.0
     """
     data = analyze.pack_beatgrid(
         non_terminal_markers=[(1.5, 16)],
         terminal_marker=(4.5, 128.0),
         footer_byte=analyze.GEOB_FOOTER,
     )
-    # Terminal marker starts at offset 10 (2 header + 8 non-terminal)
-    term_pos = struct.unpack('>f', data[10:14])[0]
-    term_bpm = struct.unpack('>f', data[14:18])[0]
+    # Terminal marker starts at offset 12 (2 version + 2 count + 8 non-terminal)
+    term_pos = struct.unpack('>f', data[12:16])[0]
+    term_bpm = struct.unpack('>f', data[16:20])[0]
     assert abs(term_pos - 4.5) < 1e-4, f"Terminal position wrong: {term_pos}"
     assert abs(term_bpm - 128.0) < 1e-4, f"Terminal BPM wrong: {term_bpm}"
 
