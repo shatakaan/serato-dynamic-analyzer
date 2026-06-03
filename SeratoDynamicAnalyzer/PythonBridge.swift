@@ -133,11 +133,18 @@ actor PythonBridge {
                     "bpm_max": bpmMax,
                     "dry_run": dryRun,
                 ]
-                if let data = try? JSONSerialization.data(withJSONObject: request),
-                   let line = String(data: data, encoding: .utf8) {
-                    let payload = (line + "\n").data(using: .utf8)!
-                    stdinPipe.fileHandleForWriting.write(payload)
+                // Surface serialization failure as an error event (WR-04).
+                // Silent if-let would skip the write, leaving Python's read loop
+                // hanging and AnalysisViewModel.isRunning stuck true forever.
+                guard let data = try? JSONSerialization.data(withJSONObject: request),
+                      let line = String(data: data, encoding: .utf8) else {
+                    continuation.yield(.error(file: filePath,
+                        message: "Failed to serialize analysis request"))
+                    continuation.finish()
+                    return
                 }
+                let payload = (line + "\n").data(using: .utf8)!
+                stdinPipe.fileHandleForWriting.write(payload)
                 // Read JSONL events until result or error (terminal events)
                 let handle = stdoutPipe.fileHandleForReading
                 do {
