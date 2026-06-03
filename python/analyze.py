@@ -782,8 +782,17 @@ def analyze_track(
         if not dry_run:
             backup_path_obj = create_backup(resolved)
             backup_path_str = str(backup_path_obj)
-            write_fn = _select_write_fn(resolved)
-            atomic_write_geob(resolved, write_fn, geob_bytes)
+            try:
+                write_fn = _select_write_fn(resolved)
+                atomic_write_geob(resolved, write_fn, geob_bytes)
+            except Exception:
+                # Write failed — remove backup so no orphan artifact is left
+                # behind implying a write was attempted (WR-02).
+                try:
+                    backup_path_obj.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise
         else:
             backup_path_str = None
     except Exception as exc:
