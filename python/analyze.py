@@ -909,7 +909,12 @@ if __name__ == '__main__':
             _bpm_min = int(req.get("bpm_min", 60))
             _bpm_max = int(req.get("bpm_max", 200))
             _dry_run = bool(req.get("dry_run", False))
-            analyze_track(Path(_file_path), bpm_min=_bpm_min, bpm_max=_bpm_max, dry_run=_dry_run)
+            # Top-level guard so MemoryError, SystemExit, or any other
+            # unexpected exception does not kill the worker process (WR-03).
+            try:
+                analyze_track(Path(_file_path), bpm_min=_bpm_min, bpm_max=_bpm_max, dry_run=_dry_run)
+            except Exception as _exc:
+                emit_error(_file_path, f"Unhandled worker error: {_exc}")
     else:
         # CLI mode — require a file argument
         if not _args.file:
