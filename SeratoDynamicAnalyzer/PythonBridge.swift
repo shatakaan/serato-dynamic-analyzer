@@ -13,9 +13,9 @@ enum BridgeError: Error {
 
 actor PythonBridge {
     private var process: Process?
-    private var stdinPipe: Pipe = Pipe()
-    private let stdoutPipe: Pipe = Pipe()
-    private let stderrPipe: Pipe = Pipe()
+    private var stdinPipe:  Pipe = Pipe()
+    private var stdoutPipe: Pipe = Pipe()   // var: recreated on each restart
+    private var stderrPipe: Pipe = Pipe()   // var: recreated on each restart
     private var isWorkerRunning: Bool = false
 
     // MARK: Worker startup
@@ -28,8 +28,11 @@ actor PythonBridge {
         p.executableURL = pythonURL
         p.arguments = ["-u", scriptURL.path, "--worker"]
 
-        // Create fresh stdinPipe; MUST be assigned before p.run() (Pitfall 1 prevention)
-        stdinPipe = Pipe()
+        // Create fresh pipes on every (re)start so stale read loops see EOF
+        // after a crash rather than blocking forever (CR-01).
+        stdinPipe  = Pipe()
+        stdoutPipe = Pipe()
+        stderrPipe = Pipe()
         p.standardInput = stdinPipe
         p.standardOutput = stdoutPipe
         p.standardError = stderrPipe
@@ -64,6 +67,9 @@ actor PythonBridge {
 
     private func handleCrash(exitCode: Int32) {
         isWorkerRunning = false
+        // Close the write end of stdout so any in-flight bytes.lines reader
+        // sees EOF and unblocks rather than hanging forever (CR-01).
+        try? stdoutPipe.fileHandleForWriting.close()
         process = nil
         // Next analyze() call will auto-restart the worker
     }
@@ -71,17 +77,30 @@ actor PythonBridge {
     // MARK: Wait for ready signal (called once after startWorker)
 
     func waitForReady(timeout: TimeInterval = 30) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
         let handle = stdoutPipe.fileHandleForReading
-        do {
-            for try await line in handle.bytes.lines {
-                if let event = parseEvent(line), case .ready = event {
-                    return true
-                }
-                if Date() > deadline { return false }
+        // Race the line-reading loop against a deadline task (CR-02).
+        // Without this race the deadline check inside the loop only fires when a
+        // new line arrives — a silent Python startup failure (import error, crash
+        // before "ready", buffering) suspends the await forever.
+        return await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                do {
+                    for try await line in handle.bytes.lines {
+                        if let event = self.parseEvent(line), case .ready = event {
+                            return true
+                        }
+                    }
+                } catch {}
+                return false
             }
-        } catch {}
-        return false
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                return false
+            }
+            let result = await group.next() ?? false
+            group.cancelAll()
+            return result
+        }
     }
 
     // MARK: Send analysis request + stream events
