@@ -64,9 +64,9 @@ struct ContentView: View {
         .fileImporter(
             isPresented: $showFilePicker,
             allowedContentTypes: [
-                UTType(filenameExtension: "mp3")!,
-                UTType(filenameExtension: "aiff")!,
-                UTType(filenameExtension: "wav")!,
+                UTType.mp3,
+                UTType(filenameExtension: "aiff") ?? UTType.audio,
+                UTType(filenameExtension: "wav")  ?? UTType.audio,
             ],
             allowsMultipleSelection: false
         ) { result in
