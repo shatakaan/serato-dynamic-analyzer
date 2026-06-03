@@ -26,7 +26,7 @@ SCRIPTS_DIR      := $(BUNDLE_RESOURCES)/scripts
 # Auto-detect Homebrew prefix so both Apple Silicon (/opt/homebrew) and
 # Intel (/usr/local) Macs work without manual edits (WR-07).
 BREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
-BREW_PYTHON := $(BREW_PREFIX)/opt/python@3.12/bin/python3.12
+BREW_PYTHON := $(BREW_PREFIX)/opt/python@3.11/bin/python3.11
 
 # Xcode.app required for xcodebuild (CLT alone is insufficient)
 DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
@@ -46,8 +46,8 @@ release: deps bundle-swift bundle-python sign dmg
 # ──────────────────────────────────────────────────────────────────────────────
 deps:
 	which uv || brew install uv
-	@test -f "$(BREW_PYTHON)" || (echo "ERROR: Homebrew Python 3.12 not found at $(BREW_PYTHON). Run: brew install python@3.12" && exit 1)
-	@echo "deps OK — uv and Python 3.12 present"
+	@test -f "$(BREW_PYTHON)" || (echo "ERROR: Homebrew Python 3.12 not found at $(BREW_PYTHON). Run: brew install python@3.11" && exit 1)
+	@echo "deps OK — uv and Python 3.11 present"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Create relocatable venv with --copies so python3.12 binary is a real copy.
