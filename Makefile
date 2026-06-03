@@ -10,7 +10,7 @@
 #   make clean          — Remove .app, derived data, .dmg (keeps venv cache)
 #   make distclean      — Remove all of build/
 #
-# Python source: Homebrew Python 3.11 with --copies venv so the binary is a real
+# Python source: Homebrew Python 3.12 with --copies venv so the binary is a real
 # copy (not a symlink). When the venv is moved inside the .app bundle, Python finds
 # its pyvenv.cfg two levels above the binary and correctly activates site-packages.
 # Works on the developer's Mac where Homebrew is installed. (Phase 2 dev build)
@@ -21,9 +21,12 @@ BUNDLE_RESOURCES := $(APP)/Contents/Resources
 PYTHON_RUNTIME   := $(BUNDLE_RESOURCES)/python-runtime
 SCRIPTS_DIR      := $(BUNDLE_RESOURCES)/scripts
 
-# Homebrew Python 3.11 — provides a real subprocess-callable python binary.
+# Homebrew Python 3.12 — provides a real subprocess-callable python binary.
 # BeeWare Python.xcframework was tried but ships no bin/python3 executable.
-BREW_PYTHON := /opt/homebrew/opt/python@3.11/bin/python3.11
+# Auto-detect Homebrew prefix so both Apple Silicon (/opt/homebrew) and
+# Intel (/usr/local) Macs work without manual edits (WR-07).
+BREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
+BREW_PYTHON := $(BREW_PREFIX)/opt/python@3.12/bin/python3.12
 
 # Xcode.app required for xcodebuild (CLT alone is insufficient)
 DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
@@ -43,11 +46,11 @@ release: deps bundle-swift bundle-python sign dmg
 # ──────────────────────────────────────────────────────────────────────────────
 deps:
 	which uv || brew install uv
-	@test -f "$(BREW_PYTHON)" || (echo "ERROR: Homebrew Python 3.11 not found at $(BREW_PYTHON). Run: brew install python@3.11" && exit 1)
-	@echo "deps OK — uv and Python 3.11 present"
+	@test -f "$(BREW_PYTHON)" || (echo "ERROR: Homebrew Python 3.12 not found at $(BREW_PYTHON). Run: brew install python@3.12" && exit 1)
+	@echo "deps OK — uv and Python 3.12 present"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Create relocatable venv with --copies so python3.11 binary is a real copy.
+# Create relocatable venv with --copies so python3.12 binary is a real copy.
 # A copied binary correctly resolves pyvenv.cfg when moved inside .app bundle.
 # File rule — reruns only if venv dir does not exist.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -55,12 +58,12 @@ build/python-runtime/venv:
 	mkdir -p build/python-runtime
 	"$(BREW_PYTHON)" -m venv --copies build/python-runtime/venv
 	uv pip install -r python/requirements.txt \
-	    --python build/python-runtime/venv/bin/python3.11
-	@echo "venv: Python 3.11 venv with all dependencies created"
+	    --python build/python-runtime/venv/bin/python3.12
+	@echo "venv: Python 3.12 venv with all dependencies created"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # bundle-python: Copy venv + analyze.py into .app Resources
-# Layout: Resources/python-runtime/venv/bin/python3.11  (matches PythonBridge path)
+# Layout: Resources/python-runtime/venv/bin/python3.12  (matches PythonBridge path)
 #         Resources/scripts/analyze.py
 # ──────────────────────────────────────────────────────────────────────────────
 bundle-python: build/python-runtime/venv
@@ -69,7 +72,7 @@ bundle-python: build/python-runtime/venv
 	cp -R build/python-runtime/venv "$(PYTHON_RUNTIME)/venv"
 	mkdir -p "$(SCRIPTS_DIR)"
 	cp python/analyze.py "$(SCRIPTS_DIR)/"
-	chmod +x "$(PYTHON_RUNTIME)/venv/bin/python3.11"
+	chmod +x "$(PYTHON_RUNTIME)/venv/bin/python3.12"
 	@echo "bundle-python: venv + analyze.py embedded"
 
 # ──────────────────────────────────────────────────────────────────────────────

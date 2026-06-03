@@ -193,13 +193,13 @@ actor PythonBridge {
             throw BridgeError.bundlePathUnavailable
         }
         // Path matches Makefile bundle-python target:
-        // Resources/python-runtime/venv/bin/python3.11
+        // Resources/python-runtime/venv/bin/python3.12
         // The venv is built with --copies so this is a real executable, not a symlink.
         let pythonURL = URL(fileURLWithPath: resourcePath)
             .appendingPathComponent("python-runtime")
             .appendingPathComponent("venv")
             .appendingPathComponent("bin")
-            .appendingPathComponent("python3.11")
+            .appendingPathComponent("python3.12")
         guard FileManager.default.fileExists(atPath: pythonURL.path) else {
             throw BridgeError.pythonBinaryNotFound(path: pythonURL.path)
         }
