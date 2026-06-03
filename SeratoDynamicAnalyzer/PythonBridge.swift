@@ -110,7 +110,19 @@ actor PythonBridge {
             Task {
                 // Restart worker if it crashed
                 if !isWorkerRunning {
-                    try? await startWorker()
+                    // Propagate startWorker() failures rather than silently
+                    // discarding them (WR-01): a missing Python binary or
+                    // bundle misconfiguration must surface as an error event,
+                    // not leave the continuation hanging waiting for output
+                    // that will never arrive.
+                    do {
+                        try await startWorker()
+                    } catch {
+                        continuation.yield(.error(file: filePath,
+                            message: "Failed to restart Python worker: \(error)"))
+                        continuation.finish()
+                        return
+                    }
                     // Wait for ready after restart
                     let _ = await waitForReady(timeout: 30)
                 }
