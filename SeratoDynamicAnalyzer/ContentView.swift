@@ -54,6 +54,16 @@ struct ContentView: View {
             guard let provider = providers.first else { return false }
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
                 guard let url = url else { return }
+                // Validate extension before accepting the drop (WR-06).
+                // Without this check any file appears to succeed on drop
+                // but then fails immediately on Analyze, which is confusing.
+                guard ["mp3", "aiff", "aif", "wav"]
+                    .contains(url.pathExtension.lowercased()) else {
+                    DispatchQueue.main.async {
+                        viewModel.errorMessage = "Unsupported file type: .\(url.pathExtension)"
+                    }
+                    return
+                }
                 DispatchQueue.main.async {
                     viewModel.trackURL = url.standardizedFileURL
                 }
