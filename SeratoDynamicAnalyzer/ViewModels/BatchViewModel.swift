@@ -40,7 +40,7 @@ class BatchViewModel: ObservableObject {
     }
 
     var canStartBatch: Bool {
-        !tracks.isEmpty && tracks.contains { $0.status == .pending } && workerReadyCount > 0
+        !tracks.isEmpty && tracks.contains { $0.status == .pending }
     }
 
     // MARK: - Worker Startup
