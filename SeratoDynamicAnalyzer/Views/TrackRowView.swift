@@ -4,24 +4,59 @@ import AppKit
 // MARK: - TrackRowView
 // Per-row view in the batch queue list. Uses @ObservedObject on the TrackItem class
 // so only the affected row re-renders when status/progress changes — not the full list.
+//
+// Done and Failed rows are wrapped in a DisclosureGroup with $item.isExpanded binding.
+// Pending and Analyzing rows use a plain HStack — not expandable per UI-SPEC.
 
 struct TrackRowView: View {
     @ObservedObject var item: TrackItem
     @ObservedObject var viewModel: BatchViewModel
+    @State private var showBpmPopover: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8)  {
+        switch item.status {
+        case .done, .failed:
+            DisclosureGroup(isExpanded: $item.isExpanded) {
+                TrackDetailView(item: item)
+                    .padding(.leading, 88)
+            } label: {
+                rowLabel
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 16)
+
+        case .pending, .analyzing:
+            rowLabel
+                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .frame(minHeight: 44)
+        }
+    }
+
+    // MARK: - Row label (shared between expandable and plain cases)
+
+    private var rowLabel: some View {
+        HStack(alignment: .center, spacing: 8) {
             // Status pill (fixed width to keep columns aligned)
             StatusPillView(status: item.status)
                 .frame(width: 88)
                 .accessibilityLabel("\(item.filename), status: \(item.status.rawValue)")
 
-            // Filename (truncated in the middle for long paths)
-            Text(item.filename)
-                .font(.body)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Filename (truncated in the middle for long paths) + BPM override trigger
+            HStack(spacing: 4) {
+                Text(item.filename)
+                    .font(.body)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                // BPM override icon — Pending rows only
+                if item.status == .pending {
+                    bpmOverrideButton
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Status-dependent right column
             switch item.status {
@@ -60,9 +95,91 @@ struct TrackRowView: View {
                     .frame(width: 32)
             }
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 16)
         .frame(minHeight: 44)
+    }
+
+    // MARK: - BPM override icon button
+
+    private var bpmOverrideButton: some View {
+        let hasOverride = item.bpmMinOverride != nil || item.bpmMaxOverride != nil
+        return Button {
+            showBpmPopover = true
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 12))
+                .foregroundColor(hasOverride ? Color.accentColor : Color(nsColor: .tertiaryLabelColor))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("BPM override for \(item.filename)")
+        .popover(isPresented: $showBpmPopover) {
+            bpmOverridePopover
+        }
+    }
+
+    // MARK: - BPM override popover content
+
+    private var bpmOverridePopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("BPM Override for \(item.filename)")
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            // Min BPM stepper
+            HStack(spacing: 4) {
+                Text("Min:")
+                    .font(.caption)
+                Stepper(
+                    "",
+                    value: Binding(
+                        get: { item.bpmMinOverride ?? viewModel.globalBpmMin },
+                        set: { item.bpmMinOverride = $0 }
+                    ),
+                    in: 20...((item.bpmMaxOverride ?? viewModel.globalBpmMax) - 1)
+                )
+                .labelsHidden()
+                Text("\(item.bpmMinOverride ?? viewModel.globalBpmMin)")
+                    .font(.body)
+                    .frame(minWidth: 36)
+            }
+
+            // Max BPM stepper
+            HStack(spacing: 4) {
+                Text("Max:")
+                    .font(.caption)
+                Stepper(
+                    "",
+                    value: Binding(
+                        get: { item.bpmMaxOverride ?? viewModel.globalBpmMax },
+                        set: { item.bpmMaxOverride = $0 }
+                    ),
+                    in: ((item.bpmMinOverride ?? viewModel.globalBpmMin) + 1)...300
+                )
+                .labelsHidden()
+                Text("\(item.bpmMaxOverride ?? viewModel.globalBpmMax)")
+                    .font(.body)
+                    .frame(minWidth: 36)
+            }
+
+            HStack {
+                Button("Reset to Global Default") {
+                    item.bpmMinOverride = nil
+                    item.bpmMaxOverride = nil
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+
+                Spacer()
+
+                Button("Done") {
+                    showBpmPopover = false
+                }
+                .buttonStyle(.borderedProminent)
+                .font(.caption)
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 220)
     }
 }
 
