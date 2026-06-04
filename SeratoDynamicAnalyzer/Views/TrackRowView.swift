@@ -2,145 +2,174 @@ import SwiftUI
 import AppKit
 
 // MARK: - TrackRowView
-// Per-row view in the batch queue list. Uses @ObservedObject on the TrackItem class
-// so only the affected row re-renders when status/progress changes — not the full list.
+// Kinetic Dark library row: 3px colored left edge, beatgrid icon, filename/path,
+// mono BPM result, cancel button. Uses @ObservedObject so only the affected row
+// re-renders on status/progress changes — not the full list.
 
 struct TrackRowView: View {
     @ObservedObject var item: TrackItem
     @ObservedObject var viewModel: BatchViewModel
+    @State private var isHovered = false
+
+    private var trackDisplayName: String {
+        let name = item.url.deletingPathExtension().lastPathComponent
+        // "Artist - Title" → show as-is; otherwise just the name
+        return name
+    }
+
+    private var trackSubtitle: String {
+        item.url.deletingLastPathComponent().lastPathComponent
+    }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8)  {
-            // Status pill (fixed width to keep columns aligned)
-            StatusPillView(status: item.status)
-                .frame(width: 88)
-                .accessibilityLabel("\(item.filename), status: \(item.status.rawValue)")
+        HStack(spacing: 0) {
+            // 3px status edge
+            Rectangle()
+                .fill(Color.kdStatusEdge(item.status))
+                .frame(width: 3)
+                .animation(.easeInOut(duration: 0.2), value: item.status)
 
-            // Filename (truncated in the middle for long paths)
-            Text(item.filename)
-                .font(.body)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Beatgrid / status icon
+            statusIcon
+                .frame(width: 36, alignment: .center)
 
-            // Status-dependent right column
-            switch item.status {
-            case .analyzing:
-                ProgressView()
-                    .scaleEffect(0.8)
-                    .tint(.accentColor)
-                    .frame(width: 80)
-            case .done:
-                if let result = item.result {
-                    Text(String(format: "%.1f–%.1f", result.bpmMin, result.bpmMax))
-                        .font(.caption)
-                        .frame(width: 64)
-                    Text("\(result.markerCount)")
-                        .font(.caption)
-                        .frame(width: 48)
-                }
-            case .failed:
-                if let msg = item.errorMessage {
-                    Text(msg)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .lineLimit(1)
-                        .frame(maxWidth: 160)
-                }
-            case .pending:
-                Spacer()
-                    .frame(width: 0)
+            // Track name + folder
+            VStack(alignment: .leading, spacing: 2) {
+                Text(trackDisplayName)
+                    .font(.kdBody)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.kdOnSurface)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(trackSubtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.kdMuted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 4)
+
+            // Inline progress bar while analyzing
+            if item.status == .analyzing && item.progress > 0 {
+                ProgressView(value: item.progress)
+                    .progressViewStyle(.linear)
+                    .tint(Color.kdPrimary)
+                    .frame(width: 60)
+                    .padding(.trailing, 8)
             }
 
-            // Cancel / remove button (Pending and Analyzing rows only)
-            if item.status == .pending || item.status == .analyzing {
-                CancelButton(item: item, viewModel: viewModel)
-            } else {
-                Spacer()
-                    .frame(width: 32)
-            }
+            // BPM result / state indicator
+            bpmColumn
+                .frame(width: 88, alignment: .trailing)
+                .padding(.trailing, 8)
+
+            // Cancel / remove button
+            cancelButton
+                .frame(width: 32)
+                .padding(.trailing, 8)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 16)
         .frame(minHeight: 44)
+        .background(rowBackground)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { isHovered = $0 }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(trackDisplayName), \(item.status.rawValue)")
     }
-}
 
-// MARK: - StatusPillView
+    // MARK: - Sub-views
 
-private struct StatusPillView: View {
-    var status: TrackStatus
+    @ViewBuilder
+    private var statusIcon: some View {
+        switch item.status {
+        case .pending:
+            Image(systemName: "square.grid.3x3")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.kdMuted.opacity(0.5))
+        case .analyzing:
+            ProgressView()
+                .scaleEffect(0.7)
+                .tint(Color.kdPrimary)
+        case .done:
+            Image(systemName: "square.grid.3x3.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.kdTertiary)
+        case .failed:
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.kdSecondary)
+        }
+    }
 
-    var body: some View {
-        HStack(spacing: 4) {
-            // Leading icon / spinner
-            switch status {
-            case .pending:
-                Image(systemName: "clock")
-                    .font(.caption)
-            case .analyzing:
-                ProgressView()
-                    .scaleEffect(0.6)
-            case .done:
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption)
-            case .failed:
-                Image(systemName: "exclamationmark.circle.fill")
-                    .font(.caption)
+    @ViewBuilder
+    private var bpmColumn: some View {
+        switch item.status {
+        case .pending:
+            Text("—.—")
+                .font(.kdMono)
+                .foregroundStyle(Color.kdMuted.opacity(0.4))
+
+        case .analyzing:
+            Text("···")
+                .font(.kdMono)
+                .foregroundStyle(Color.kdPrimary)
+
+        case .done:
+            if let r = item.result {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(String(format: "%.2f", (r.bpmMin + r.bpmMax) / 2))
+                        .font(.kdMonoLg)
+                        .foregroundStyle(Color.kdTertiary)
+                    if abs(r.bpmMax - r.bpmMin) > 0.5 {
+                        Text(String(format: "%.1f–%.1f", r.bpmMin, r.bpmMax))
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color.kdMuted)
+                    }
+                }
             }
-            Text(status.rawValue)
-                .font(.caption)
-        }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
-        .background(pillBackground(for: status))
-        .foregroundColor(pillForeground(for: status))
-        .cornerRadius(4)
-    }
 
-    private func pillBackground(for status: TrackStatus) -> Color {
-        switch status {
-        case .pending:   return Color(nsColor: .quaternaryLabelColor)
-        case .analyzing: return Color.accentColor.opacity(0.15)
-        case .done:      return Color.green.opacity(0.15)
-        case .failed:    return Color.red.opacity(0.15)
+        case .failed:
+            Text("ERR")
+                .font(.kdMono)
+                .foregroundStyle(Color.kdSecondary)
         }
     }
 
-    private func pillForeground(for status: TrackStatus) -> Color {
-        switch status {
-        case .pending:   return Color(nsColor: .secondaryLabelColor)
-        case .analyzing: return Color.accentColor
-        case .done:      return Color.green
-        case .failed:    return Color.red
+    @ViewBuilder
+    private var cancelButton: some View {
+        if item.status == .pending || item.status == .analyzing {
+            CancelButtonView(item: item, viewModel: viewModel)
+        } else {
+            Spacer().frame(width: 32)
         }
+    }
+
+    private var rowBackground: Color {
+        isHovered ? Color.kdSurface.opacity(0.6) : Color.clear
     }
 }
 
-// MARK: - CancelButton
+// MARK: - CancelButtonView
 
-private struct CancelButton: View {
+private struct CancelButtonView: View {
     var item: TrackItem
     @ObservedObject var viewModel: BatchViewModel
-    @State private var isHovered: Bool = false
+    @State private var isHovered = false
 
     var body: some View {
         Button {
             viewModel.cancelTrack(item)
         } label: {
             Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 16))
-                .foregroundColor(isHovered
-                    ? Color(nsColor: .secondaryLabelColor)
-                    : Color(nsColor: .tertiaryLabelColor))
+                .font(.system(size: 15))
+                .foregroundStyle(isHovered ? Color.kdSecondary : Color.kdMuted.opacity(0.4))
         }
         .buttonStyle(.plain)
         .frame(width: 32, height: 44)
-        .onHover { hovering in isHovered = hovering }
-        .accessibilityLabel(
-            item.status == .pending
-                ? "Remove \(item.filename) from queue"
-                : "Cancel analysis of \(item.filename)"
-        )
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.1), value: isHovered)
+        .accessibilityLabel(item.status == .pending
+            ? "Remove \(item.filename) from queue"
+            : "Cancel analysis of \(item.filename)")
     }
 }

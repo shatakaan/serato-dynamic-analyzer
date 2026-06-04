@@ -19,6 +19,7 @@
 		AA11000000000009 /* TrackRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000A /* TrackRowView.swift */; };
 		AA1100000000000C /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000B /* DesignSystem.swift */; };
 		AA1100000000000E /* AppHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000D /* AppHeaderView.swift */; };
+		AA22000000000002 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AA22000000000001 /* AppIcon.icns */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		AA1100000000000A /* TrackRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackRowView.swift; sourceTree = "<group>"; };
 		AA1100000000000B /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		AA1100000000000D /* AppHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppHeaderView.swift; sourceTree = "<group>"; };
+		AA22000000000001 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; name = AppIcon.icns; path = SeratoDynamicAnalyzer/Resources/AppIcon.icns; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -113,6 +115,7 @@
 			children = (
 				FEF01BB9A4D6454CBE75F598 /* SeratoDynamicAnalyzer.entitlements */,
 				335A87C8176945308CD9B013 /* Info.plist */,
+				AA22000000000001 /* AppIcon.icns */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -171,6 +174,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA22000000000002 /* AppIcon.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
