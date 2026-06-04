@@ -10,7 +10,7 @@
 
 - [x] **Phase 1: Python Analysis Core** - Validate the central bet: analyze.py writes byte-exact GEOB tags that Serato accepts (completed 2026-06-02)
 - [x] **Phase 2: PythonBridge + Swift Integration** - Launch analysis from Swift for a single track; sign and notarize the app bundle (completed 2026-06-02)
-- [ ] **Phase 3: Batch Queue + Drag & Drop UI** - Multi-track workflow: drop files, watch progress, read per-track results and errors
+- [x] **Phase 3: Batch Queue + Drag & Drop UI** - Multi-track workflow: drop files, watch progress, read per-track results and errors (completed 2026-06-04)
 - [ ] **Phase 4: Serato Library Browser** - Browse crates, inspect existing beatgrids, send library tracks to the analysis queue
 - [ ] **Phase 5: Format Expansion + Distribution** - M4A and MP4 support via ffmpeg; signed and notarized DMG for GitHub Releases
 
@@ -98,11 +98,11 @@
 
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Core batch slice: TrackItem model, BatchViewModel with 1–4 worker pool, BatchHeaderView, BatchQueueView (drop handler + folder scan), TrackRowView (status pills), ContentView refactor, AnalysisViewModel deleted
+- [x] 03-01-PLAN.md — Core batch slice: TrackItem model, BatchViewModel with 1–4 worker pool, BatchHeaderView, BatchQueueView (drop handler + folder scan), TrackRowView (status pills), ContentView refactor, AnalysisViewModel deleted
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — Detail layer: TrackDetailView (accordion expansion for Done/Failed), DisclosureGroup wiring, per-track BPM override popover, cancel button; phase acceptance smoke test
+- [x] 03-02-PLAN.md — Detail layer: TrackDetailView (accordion expansion for Done/Failed), DisclosureGroup wiring, per-track BPM override popover, cancel button; phase acceptance smoke test
 
 ### Phase 4: Serato Library Browser
 
@@ -141,7 +141,7 @@
 |-------|----------------|--------|-----------|
 | 1. Python Analysis Core | 4/4 | Complete    | 2026-06-02 |
 | 2. PythonBridge + Swift Integration | 5/5 | Complete    | 2026-06-03 |
-| 3. Batch Queue + Drag & Drop UI | 0/2 | Not started | - |
+| 3. Batch Queue + Drag & Drop UI | 2/2 | Complete   | 2026-06-04 |
 | 4. Serato Library Browser | 0/? | Not started | - |
 | 5. Format Expansion + Distribution | 0/? | Not started | - |
 
