@@ -117,8 +117,13 @@
   3. Each track in the library view shows a visual indicator: no beatgrid, beatgrid set by Serato's own analysis, or beatgrid set by this tool
   4. Selecting one or more tracks and clicking "Analyze Selected" adds them to the batch queue and begins analysis
 
-**Plans**: TBD
+**Plans**: 3 plans (3 waves)
 **UI hint**: yes
+
+Plans:
+- [ ] 04-01-PLAN.md — Python backbone: library.py (crate tree, list_crates/list_tracks IPC, read_beatgrid_source), 0x01 0x01 version byte, test_library.py
+- [ ] 04-02-PLAN.md — Swift data layer: SeratoCrate/LibraryTrack models, PythonBridge listCrates/listTracks, LibraryViewModel (dedicated worker), BatchViewModel.addLibraryTrack
+- [ ] 04-03-PLAN.md — UI slice: kdWarning token, 6 Library views (HSplitView/OutlineGroup/track table/dot/CTA/empty state), ContentView TabView restructure, Makefile bundling, Serato version-byte human-verify gate
 
 ### Phase 5: Format Expansion + Distribution
 
@@ -142,7 +147,7 @@
 | 1. Python Analysis Core | 4/4 | Complete    | 2026-06-02 |
 | 2. PythonBridge + Swift Integration | 5/5 | Complete    | 2026-06-03 |
 | 3. Batch Queue + Drag & Drop UI | 2/2 | Complete   | 2026-06-04 |
-| 4. Serato Library Browser | 0/? | Not started | - |
+| 4. Serato Library Browser | 0/3 | Planned | - |
 | 5. Format Expansion + Distribution | 0/? | Not started | - |
 
 ---
@@ -179,4 +184,4 @@
 ---
 
 *Roadmap created: 2026-06-02*
-*Last updated: 2026-06-03 — Phase 3 planned (2 plans in 2 waves)*
+*Last updated: 2026-06-04 — Phase 4 planned (3 plans in 3 waves)*
