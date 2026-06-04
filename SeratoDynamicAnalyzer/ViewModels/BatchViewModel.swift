@@ -140,12 +140,14 @@ class BatchViewModel: ObservableObject {
         case .result(let r):
             trackItem.result = r
             trackItem.analysisDuration = Date().timeIntervalSince(startTime)
+            objectWillChange.send()
             trackItem.status = .done
             assignments[slotIndex] = nil
             dispatchNextPendingTracks()
         case .error(_, let msg):
             trackItem.errorMessage = msg
             trackItem.analysisDuration = Date().timeIntervalSince(startTime)
+            objectWillChange.send()
             trackItem.status = .failed
             assignments[slotIndex] = nil
             dispatchNextPendingTracks()
