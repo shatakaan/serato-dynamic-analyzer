@@ -19,6 +19,7 @@
 		AA11000000000009 /* TrackRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000A /* TrackRowView.swift */; };
 		AA1100000000000C /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000B /* DesignSystem.swift */; };
 		AA1100000000000E /* AppHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000D /* AppHeaderView.swift */; };
+		AA11000000000012 /* TrackDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000013 /* TrackDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		AA1100000000000A /* TrackRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackRowView.swift; sourceTree = "<group>"; };
 		AA1100000000000B /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		AA1100000000000D /* AppHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppHeaderView.swift; sourceTree = "<group>"; };
+		AA11000000000013 /* TrackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackDetailView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -104,6 +106,7 @@
 				AA11000000000006 /* BatchHeaderView.swift */,
 				AA11000000000008 /* BatchQueueView.swift */,
 				AA1100000000000A /* TrackRowView.swift */,
+				AA11000000000013 /* TrackDetailView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -192,6 +195,7 @@
 				AA11000000000009 /* TrackRowView.swift in Sources */,
 				AA1100000000000C /* DesignSystem.swift in Sources */,
 				AA1100000000000E /* AppHeaderView.swift in Sources */,
+				AA11000000000012 /* TrackDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
