@@ -29,9 +29,7 @@ class BatchViewModel: ObservableObject {
 
     // MARK: - Computed Properties
 
-    var completedCount: Int {
-        tracks.filter { $0.status == .done || $0.status == .failed }.count
-    }
+    @Published var completedCount: Int = 0
 
     var totalCount: Int { tracks.count }
 
@@ -140,15 +138,15 @@ class BatchViewModel: ObservableObject {
         case .result(let r):
             trackItem.result = r
             trackItem.analysisDuration = Date().timeIntervalSince(startTime)
-            objectWillChange.send()
             trackItem.status = .done
+            completedCount += 1
             assignments[slotIndex] = nil
             dispatchNextPendingTracks()
         case .error(_, let msg):
             trackItem.errorMessage = msg
             trackItem.analysisDuration = Date().timeIntervalSince(startTime)
-            objectWillChange.send()
             trackItem.status = .failed
+            completedCount += 1
             assignments[slotIndex] = nil
             dispatchNextPendingTracks()
         }
@@ -218,6 +216,7 @@ class BatchViewModel: ObservableObject {
                 Task { await worker.terminate() }
                 item.errorMessage = "Cancelled by user"
                 item.status = .failed
+                completedCount += 1
                 assignments[slotIndex] = nil
                 dispatchNextPendingTracks()
             }
