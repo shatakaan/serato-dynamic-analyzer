@@ -135,7 +135,7 @@ actor PythonBridge {
                 ]
                 // Surface serialization failure as an error event (WR-04).
                 // Silent if-let would skip the write, leaving Python's read loop
-                // hanging and AnalysisViewModel.isRunning stuck true forever.
+                // hanging and the track item stuck in Analyzing state forever.
                 guard let data = try? JSONSerialization.data(withJSONObject: request),
                       let line = String(data: data, encoding: .utf8) else {
                     continuation.yield(.error(file: filePath,
@@ -184,6 +184,16 @@ actor PythonBridge {
         default:
             return nil
         }
+    }
+
+    // MARK: Terminate (D-11 per-track cancel)
+
+    /// Terminate the underlying Python process for this worker slot.
+    /// actor-isolated (not nonisolated) — caller awaits; cancel is not latency-critical.
+    /// The existing terminationHandler fires handleCrash(), which sets isWorkerRunning = false
+    /// so the next analyzeStream() call auto-restarts the worker (Phase 2 crash-recovery pattern).
+    func terminate() {
+        process?.terminate()
     }
 
     // MARK: Bundle path helpers
