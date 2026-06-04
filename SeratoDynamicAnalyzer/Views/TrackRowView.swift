@@ -3,18 +3,18 @@ import AppKit
 
 // MARK: - TrackRowView
 // Kinetic Dark library row: 3px colored left edge, beatgrid icon, filename/path,
-// mono BPM result, cancel button. Uses @ObservedObject so only the affected row
-// re-renders on status/progress changes — not the full list.
+// mono BPM result, cancel button. Done and Failed rows wrap in a DisclosureGroup
+// showing TrackDetailView. Uses @ObservedObject so only the affected row re-renders.
 
 struct TrackRowView: View {
     @ObservedObject var item: TrackItem
     @ObservedObject var viewModel: BatchViewModel
     @State private var isHovered = false
+    @State private var showBpmPopover: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var trackDisplayName: String {
-        let name = item.url.deletingPathExtension().lastPathComponent
-        // "Artist - Title" → show as-is; otherwise just the name
-        return name
+        item.url.deletingPathExtension().lastPathComponent
     }
 
     private var trackSubtitle: String {
@@ -22,6 +22,23 @@ struct TrackRowView: View {
     }
 
     var body: some View {
+        switch item.status {
+        case .done, .failed:
+            DisclosureGroup(isExpanded: $item.isExpanded) {
+                TrackDetailView(item: item)
+                    .padding(.leading, 3)
+                    .padding(.bottom, 4)
+            } label: {
+                rowContent
+            }
+        case .pending, .analyzing:
+            rowContent
+        }
+    }
+
+    // MARK: - Row content (shared label for DisclosureGroup and plain rows)
+
+    private var rowContent: some View {
         HStack(spacing: 0) {
             // 3px status edge
             Rectangle()
@@ -35,12 +52,19 @@ struct TrackRowView: View {
 
             // Track name + folder
             VStack(alignment: .leading, spacing: 2) {
-                Text(trackDisplayName)
-                    .font(.kdBody)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color.kdOnSurface)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 4) {
+                    Text(trackDisplayName)
+                        .font(.kdBody)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.kdOnSurface)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    // BPM override icon — Pending rows only
+                    if item.status == .pending {
+                        bpmOverrideButton
+                    }
+                }
                 Text(trackSubtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.kdMuted)
@@ -75,6 +99,90 @@ struct TrackRowView: View {
         .onHover { isHovered = $0 }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(trackDisplayName), \(item.status.rawValue)")
+    }
+
+    // MARK: - BPM override icon button
+
+    private var bpmOverrideButton: some View {
+        let hasOverride = item.bpmMinOverride != nil || item.bpmMaxOverride != nil
+        return Button {
+            showBpmPopover = true
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 11))
+                .foregroundColor(hasOverride ? Color.accentColor : Color(nsColor: .tertiaryLabelColor))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("BPM override for \(trackDisplayName)")
+        .popover(isPresented: $showBpmPopover) {
+            bpmOverridePopover
+        }
+    }
+
+    // MARK: - BPM override popover content
+
+    private var bpmOverridePopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("BPM Override")
+                .font(.headline)
+            Text(trackDisplayName)
+                .font(.caption)
+                .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            HStack(spacing: 4) {
+                Text("Min:")
+                    .font(.caption)
+                Stepper(
+                    "",
+                    value: Binding(
+                        get: { item.bpmMinOverride ?? viewModel.globalBpmMin },
+                        set: { item.bpmMinOverride = $0 }
+                    ),
+                    in: 20...((item.bpmMaxOverride ?? viewModel.globalBpmMax) - 1)
+                )
+                .labelsHidden()
+                Text("\(item.bpmMinOverride ?? viewModel.globalBpmMin)")
+                    .font(.body.monospacedDigit())
+                    .frame(minWidth: 36)
+            }
+
+            HStack(spacing: 4) {
+                Text("Max:")
+                    .font(.caption)
+                Stepper(
+                    "",
+                    value: Binding(
+                        get: { item.bpmMaxOverride ?? viewModel.globalBpmMax },
+                        set: { item.bpmMaxOverride = $0 }
+                    ),
+                    in: ((item.bpmMinOverride ?? viewModel.globalBpmMin) + 1)...300
+                )
+                .labelsHidden()
+                Text("\(item.bpmMaxOverride ?? viewModel.globalBpmMax)")
+                    .font(.body.monospacedDigit())
+                    .frame(minWidth: 36)
+            }
+
+            HStack {
+                Button("Reset") {
+                    item.bpmMinOverride = nil
+                    item.bpmMaxOverride = nil
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+
+                Spacer()
+
+                Button("Done") { showBpmPopover = false }
+                    .buttonStyle(.borderedProminent)
+                    .font(.caption)
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 200)
     }
 
     // MARK: - Sub-views
@@ -169,7 +277,7 @@ private struct CancelButtonView: View {
         .onHover { isHovered = $0 }
         .animation(.easeInOut(duration: 0.1), value: isHovered)
         .accessibilityLabel(item.status == .pending
-            ? "Remove \(item.filename) from queue"
-            : "Cancel analysis of \(item.filename)")
+            ? "Remove \(item.url.lastPathComponent) from queue"
+            : "Cancel analysis of \(item.url.lastPathComponent)")
     }
 }
