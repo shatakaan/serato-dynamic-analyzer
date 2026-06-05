@@ -39,7 +39,7 @@ def test_1_endianness():
         terminal_marker=(4.5, 128.0),
         footer_byte=analyze.GEOB_FOOTER,
     )
-    assert data[0:2] == b'\x01\x00', f"Version bytes wrong: {data[0:2].hex()}"
+    assert data[0:2] == b'\x01\x01', f"Version bytes wrong: {data[0:2].hex()} (D-07: our tool writes 0x01 0x01)"
     count = struct.unpack('>I', data[2:6])[0]
     assert count == 2, f"Total count field wrong: {count} (expected 2: 1 non-terminal + 1 terminal)"
     pos1 = struct.unpack('>f', data[6:10])[0]

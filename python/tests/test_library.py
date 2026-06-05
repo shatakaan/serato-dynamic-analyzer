@@ -40,6 +40,35 @@ sys.path.insert(0, str(PYTHON_DIR))
 # Fixture helpers
 # ---------------------------------------------------------------------------
 
+def _write_minimal_crate(path: Path, track_relpaths: "list[str] | None" = None) -> None:
+    """
+    Write a minimal binary .crate file that serato_tools.Crate can parse.
+
+    The binary format is TLV: 4-byte ASCII tag + 4-byte big-endian length + data.
+    Text values encode as UTF-16-BE. Track paths are stored without leading '/'.
+
+    Uses direct binary writing to avoid serato_tools DEFAULT_DATA type issues
+    (the Crate.save() method fails on the default brev field type in v2.4.0).
+    """
+
+    def encode_text(s: str) -> bytes:
+        return s.encode("utf-16-be")
+
+    def encode_field(tag: str, data: bytes) -> bytes:
+        return tag.encode("ascii") + struct.pack(">I", len(data)) + data
+
+    vrsn_field = encode_field("vrsn", encode_text("1.0/Serato ScratchLive Crate"))
+    body = vrsn_field
+
+    for relpath in (track_relpaths or []):
+        ptrk_val = encode_text(relpath.lstrip("/"))
+        ptrk_field = encode_field("ptrk", ptrk_val)
+        otrk_field = encode_field("otrk", ptrk_field)
+        body += otrk_field
+
+    path.write_bytes(body)
+
+
 def _make_synthetic_subcrates_dir(tmp_path: Path) -> Path:
     """
     Create a synthetic Subcrates directory with .crate files:
@@ -48,22 +77,12 @@ def _make_synthetic_subcrates_dir(tmp_path: Path) -> Path:
       - A%%B%%C.crate        (A->B->C; A and A%%B are implied parents with no own .crate)
     Returns the path to the Subcrates directory.
     """
-    from serato_tools.crate import Crate
-
     subcrates = tmp_path / "Subcrates"
     subcrates.mkdir()
 
-    # Create House.crate (no tracks needed for tree tests)
-    house_crate = Crate(str(subcrates / "House.crate"))
-    house_crate.save(str(subcrates / "House.crate"))
-
-    # Create House%%Deep.crate
-    deep_crate = Crate(str(subcrates / "House%%Deep.crate"))
-    deep_crate.save(str(subcrates / "House%%Deep.crate"))
-
-    # Create A%%B%%C.crate  (A and A%%B are implied parents)
-    abc_crate = Crate(str(subcrates / "A%%B%%C.crate"))
-    abc_crate.save(str(subcrates / "A%%B%%C.crate"))
+    _write_minimal_crate(subcrates / "House.crate")
+    _write_minimal_crate(subcrates / "House%%Deep.crate")
+    _write_minimal_crate(subcrates / "A%%B%%C.crate")
 
     return subcrates
 
@@ -71,21 +90,15 @@ def _make_synthetic_subcrates_dir(tmp_path: Path) -> Path:
 def _make_synthetic_crate_with_track(tmp_path: Path, track_path: str) -> Path:
     """
     Create a .crate file with one track entry pointing to `track_path`.
-    Uses add_track() which internally calls format_filepath() to strip the
-    leading slash (Serato storage format).
+    track_path should be the absolute path; the leading '/' is stripped
+    internally (Serato storage format).
     Returns the path to the .crate file.
     """
-    from serato_tools.crate import Crate
-
     subcrates = tmp_path / "Subcrates"
     subcrates.mkdir(exist_ok=True)
 
     crate_file = subcrates / "TestCrate.crate"
-    crate = Crate(str(crate_file))
-    # add_track uses format_filepath to normalize — pass without leading slash
-    # because format_filepath strips the leading slash if present
-    crate.data.append(("otrk", [("ptrk", track_path.lstrip("/"))]))
-    crate.save(str(crate_file))
+    _write_minimal_crate(crate_file, [track_path])
     return crate_file
 
 
@@ -353,13 +366,10 @@ def test_track_path_reconstruction(tmp_path):
     subcrates = tmp_path / "Subcrates"
     subcrates.mkdir()
 
-    from serato_tools.crate import Crate
     crate_file = subcrates / "Test.crate"
-    crate = Crate(str(crate_file))
-    # Directly append the otrk entry with a relative path (no leading slash)
+    # Write directly using binary format so the relpath lacks a leading slash
     rel_path = str(fake_mp3).lstrip("/")
-    crate.data.append(("otrk", [("ptrk", rel_path)]))
-    crate.save(str(crate_file))
+    _write_minimal_crate(crate_file, [rel_path])
 
     env = os.environ.copy()
     env["SERATO_SUBCRATES_DIR"] = str(subcrates)
