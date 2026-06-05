@@ -9,6 +9,14 @@ enum BridgeError: Error {
     case workerNotRunning
 }
 
+// MARK: - LibraryEvent
+
+enum LibraryEvent {
+    case crates([SeratoCrate])
+    case tracks([LibraryTrack])
+    case error(String)
+}
+
 // MARK: - PythonBridge actor
 
 actor PythonBridge {
@@ -181,6 +189,80 @@ actor PythonBridge {
                 file: json["file"] as? String ?? "",
                 message: json["msg"] as? String ?? "Unknown error"
             )
+        default:
+            return nil
+        }
+    }
+
+    // MARK: Library Commands (Plan 04-02)
+
+    /// Send list_crates command and return the crate tree.
+    /// Restarts the worker if it crashed before issuing the command.
+    func listCrates() async -> [SeratoCrate] {
+        if !isWorkerRunning {
+            try? await startWorker()
+            _ = await waitForReady(timeout: 30)
+        }
+        let request: [String: Any] = ["cmd": "list_crates"]
+        guard let data = try? JSONSerialization.data(withJSONObject: request),
+              let line = String(data: data, encoding: .utf8) else { return [] }
+        stdinPipe.fileHandleForWriting.write((line + "\n").data(using: .utf8)!)
+
+        let handle = stdoutPipe.fileHandleForReading
+        do {
+            for try await rawLine in handle.bytes.lines {
+                guard let parsed = parseLibraryEvent(rawLine) else { continue }
+                switch parsed {
+                case .crates(let tree): return tree
+                case .error:            return []
+                default:                continue
+                }
+            }
+        } catch {}
+        return []
+    }
+
+    /// Send list_tracks command and return tracks for the given crate path.
+    /// Restarts the worker if it crashed before issuing the command.
+    func listTracks(crate: String) async -> [LibraryTrack] {
+        if !isWorkerRunning {
+            try? await startWorker()
+            _ = await waitForReady(timeout: 30)
+        }
+        let request: [String: Any] = ["cmd": "list_tracks", "crate": crate]
+        guard let data = try? JSONSerialization.data(withJSONObject: request),
+              let line = String(data: data, encoding: .utf8) else { return [] }
+        stdinPipe.fileHandleForWriting.write((line + "\n").data(using: .utf8)!)
+
+        let handle = stdoutPipe.fileHandleForReading
+        do {
+            for try await rawLine in handle.bytes.lines {
+                guard let parsed = parseLibraryEvent(rawLine) else { continue }
+                switch parsed {
+                case .tracks(let list): return list
+                case .error:            return []
+                default:                continue
+                }
+            }
+        } catch {}
+        return []
+    }
+
+    // MARK: Library JSONL event parser
+
+    nonisolated func parseLibraryEvent(_ line: String) -> LibraryEvent? {
+        guard let data = line.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type_ = json["type"] as? String else { return nil }
+        switch type_ {
+        case "crates":
+            let rawTree = json["tree"] as? [[String: Any]] ?? []
+            return .crates(rawTree.map { SeratoCrate(json: $0) })
+        case "tracks":
+            let rawList = json["tracks"] as? [[String: Any]] ?? []
+            return .tracks(rawList.map { LibraryTrack(json: $0) })
+        case "error":
+            return .error(json["msg"] as? String ?? "Unknown library error")
         default:
             return nil
         }
