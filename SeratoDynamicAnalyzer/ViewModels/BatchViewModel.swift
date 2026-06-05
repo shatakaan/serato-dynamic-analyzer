@@ -204,6 +204,13 @@ class BatchViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Library Integration (Plan 04-02)
+
+    /// Called by LibraryViewModel.analyzeSelected() — same dedup as addDroppedURL.
+    func addLibraryTrack(url: URL) {
+        appendUniqueURL(url)
+    }
+
     // MARK: - Per-Track Cancel (D-11)
 
     func cancelTrack(_ item: TrackItem) {
