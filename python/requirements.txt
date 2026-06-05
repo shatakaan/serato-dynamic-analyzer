@@ -5,4 +5,5 @@ mutagen==1.47.*
 scipy==1.13.*
 scikit-learn==1.5.*
 imageio-ffmpeg>=0.4.9
+serato-tools>=2.4.0
 pytest>=8.0

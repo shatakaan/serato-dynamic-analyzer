@@ -281,7 +281,9 @@ def pack_beatgrid(
         )
 
     # Header: version (2 bytes) + total marker count including terminal (uint32 BE, 4 bytes)
-    buf = bytearray(b'\x01\x00')
+    # D-07: byte[1]=0x01 distinguishes our tool's output from Serato's 0x01 0x00
+    OUR_TOOL_VERSION: bytes = b'\x01\x01'
+    buf = bytearray(OUR_TOOL_VERSION)
     buf += struct.pack('>I', len(non_terminal_markers) + 1)
 
     # Non-terminal markers: position as big-endian f32, beats_till_next as big-endian u32
@@ -324,9 +326,9 @@ def decode_beatgrid(data: bytes) -> tuple[list[tuple[float, int]], tuple[float, 
             f"GEOB data too short: {len(data)} bytes (minimum 15: 6 header + 8 terminal + 1 footer)"
         )
 
-    # Verify version bytes
-    if data[0:2] != b'\x01\x00':
-        raise ValueError(f"GEOB version bytes wrong: {data[0:2].hex()} (expected 0100)")
+    # Verify version bytes — accept both Serato (0x01 0x00) and this tool (0x01 0x01) (D-07)
+    if data[0:2] not in (b'\x01\x00', b'\x01\x01'):
+        raise ValueError(f"GEOB version bytes wrong: {data[0:2].hex()} (expected 0100 or 0101)")
 
     # Read total marker count (includes terminal) as uint32 BE
     total_markers = struct.unpack('>I', data[2:6])[0]
@@ -905,6 +907,24 @@ if __name__ == '__main__':
             except json.JSONDecodeError as _e:
                 emit_json({"type": "error", "file": "", "msg": f"Invalid JSON request: {_e}"})
                 continue
+            # D-05: Dispatch on "cmd" key first; fall through to analyze_track for legacy requests
+            _cmd = req.get("cmd")
+            if _cmd == "list_crates":
+                try:
+                    from library import list_crates
+                    list_crates()
+                except Exception as _exc:
+                    emit_json({"type": "error", "file": "", "msg": f"list_crates failed: {_exc}"})
+                continue
+            elif _cmd == "list_tracks":
+                _crate_path = req.get("crate", "")
+                try:
+                    from library import list_tracks
+                    list_tracks(_crate_path)
+                except Exception as _exc:
+                    emit_json({"type": "error", "file": "", "msg": f"list_tracks failed: {_exc}"})
+                continue
+            # else: fall through to existing analyze_track dispatch (unchanged)
             _file_path = req.get("file", "")
             _bpm_min = int(req.get("bpm_min", 60))
             _bpm_max = int(req.get("bpm_max", 200))
