@@ -24,6 +24,12 @@
 		AA44000000000001 /* SeratoCrate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA44000000000002 /* SeratoCrate.swift */; };
 		AA44000000000003 /* LibraryTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA44000000000004 /* LibraryTrack.swift */; };
 		AA44000000000005 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA44000000000006 /* LibraryViewModel.swift */; };
+		AA55000000000001 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA55000000000002 /* LibraryView.swift */; };
+		AA55000000000003 /* CrateSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA55000000000004 /* CrateSidebarView.swift */; };
+		AA55000000000005 /* LibraryTrackTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA55000000000006 /* LibraryTrackTableView.swift */; };
+		AA55000000000007 /* LibraryTrackRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA55000000000008 /* LibraryTrackRow.swift */; };
+		AA55000000000009 /* LibraryToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA5500000000000A /* LibraryToolbarView.swift */; };
+		AA5500000000000B /* LibraryEmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA5500000000000C /* LibraryEmptyStateView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +52,12 @@
 		AA44000000000002 /* SeratoCrate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeratoCrate.swift; sourceTree = "<group>"; };
 		AA44000000000004 /* LibraryTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryTrack.swift; sourceTree = "<group>"; };
 		AA44000000000006 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
+		AA55000000000002 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		AA55000000000004 /* CrateSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrateSidebarView.swift; sourceTree = "<group>"; };
+		AA55000000000006 /* LibraryTrackTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryTrackTableView.swift; sourceTree = "<group>"; };
+		AA55000000000008 /* LibraryTrackRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryTrackRow.swift; sourceTree = "<group>"; };
+		AA5500000000000A /* LibraryToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryToolbarView.swift; sourceTree = "<group>"; };
+		AA5500000000000C /* LibraryEmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryEmptyStateView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -118,6 +130,12 @@
 				AA11000000000008 /* BatchQueueView.swift */,
 				AA1100000000000A /* TrackRowView.swift */,
 				AA11000000000013 /* TrackDetailView.swift */,
+				AA55000000000002 /* LibraryView.swift */,
+				AA55000000000004 /* CrateSidebarView.swift */,
+				AA55000000000006 /* LibraryTrackTableView.swift */,
+				AA55000000000008 /* LibraryTrackRow.swift */,
+				AA5500000000000A /* LibraryToolbarView.swift */,
+				AA5500000000000C /* LibraryEmptyStateView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -212,6 +230,12 @@
 				AA44000000000001 /* SeratoCrate.swift in Sources */,
 				AA44000000000003 /* LibraryTrack.swift in Sources */,
 				AA44000000000005 /* LibraryViewModel.swift in Sources */,
+				AA55000000000001 /* LibraryView.swift in Sources */,
+				AA55000000000003 /* CrateSidebarView.swift in Sources */,
+				AA55000000000005 /* LibraryTrackTableView.swift in Sources */,
+				AA55000000000007 /* LibraryTrackRow.swift in Sources */,
+				AA55000000000009 /* LibraryToolbarView.swift in Sources */,
+				AA5500000000000B /* LibraryEmptyStateView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -19,6 +19,7 @@ struct LibraryTrack: Identifiable {
     let filename: String
     let beatgridSource: BeatgridSource
     let durationSec: Double?    // nil for M4A/AAC (Phase 5 will add M4A duration support)
+    let bpm: Double?             // first BeatGrid marker BPM; nil when no beatgrid present
 
     init(json: [String: Any]) {
         let path = json["path"] as? String ?? ""
@@ -27,5 +28,6 @@ struct LibraryTrack: Identifiable {
         let src = json["beatgrid_source"] as? String ?? "none"
         beatgridSource = BeatgridSource(rawValue: src) ?? .none
         durationSec = json["duration_sec"] as? Double
+        bpm = json["bpm"] as? Double
     }
 }
