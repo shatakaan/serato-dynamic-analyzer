@@ -21,6 +21,9 @@
 		AA1100000000000E /* AppHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000D /* AppHeaderView.swift */; };
 		AA22000000000002 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AA22000000000001 /* AppIcon.icns */; };
 		AA11000000000012 /* TrackDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000013 /* TrackDetailView.swift */; };
+		AA44000000000001 /* SeratoCrate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA44000000000002 /* SeratoCrate.swift */; };
+		AA44000000000003 /* LibraryTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA44000000000004 /* LibraryTrack.swift */; };
+		AA44000000000005 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA44000000000006 /* LibraryViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +43,9 @@
 		AA1100000000000D /* AppHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppHeaderView.swift; sourceTree = "<group>"; };
 		AA22000000000001 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; name = AppIcon.icns; path = SeratoDynamicAnalyzer/Resources/AppIcon.icns; sourceTree = SOURCE_ROOT; };
 		AA11000000000013 /* TrackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackDetailView.swift; sourceTree = "<group>"; };
+		AA44000000000002 /* SeratoCrate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeratoCrate.swift; sourceTree = "<group>"; };
+		AA44000000000004 /* LibraryTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryTrack.swift; sourceTree = "<group>"; };
+		AA44000000000006 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,6 +95,8 @@
 			children = (
 				BE73763C9F3741B480B94D12 /* AnalysisResult.swift */,
 				AA11000000000002 /* TrackItem.swift */,
+				AA44000000000002 /* SeratoCrate.swift */,
+				AA44000000000004 /* LibraryTrack.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -97,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				AA11000000000004 /* BatchViewModel.swift */,
+				AA44000000000006 /* LibraryViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -200,6 +209,9 @@
 				AA1100000000000C /* DesignSystem.swift in Sources */,
 				AA1100000000000E /* AppHeaderView.swift in Sources */,
 				AA11000000000012 /* TrackDetailView.swift in Sources */,
+				AA44000000000001 /* SeratoCrate.swift in Sources */,
+				AA44000000000003 /* LibraryTrack.swift in Sources */,
+				AA44000000000005 /* LibraryViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
