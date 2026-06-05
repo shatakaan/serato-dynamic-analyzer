@@ -362,3 +362,66 @@ def test_10_wav_write(tmp_path):
     assert 'GEOB:Serato BeatGrid' in wf.tags, (
         f"GEOB:Serato BeatGrid not found in WAV tags. Present: {list(wf.tags.keys())}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 1 Phase 4 Tests: Version byte differentiation (D-07)
+# ---------------------------------------------------------------------------
+
+def test_tool_version_byte():
+    """
+    pack_beatgrid() output bytes[0:2] must be b'\\x01\\x01' (not b'\\x01\\x00').
+    After D-07: our tool writes byte[1]=0x01 to distinguish from Serato's 0x01 0x00.
+    RED until Task 2 changes the version byte in pack_beatgrid().
+    """
+    data = analyze.pack_beatgrid(
+        non_terminal_markers=[(1.0, 8)],
+        terminal_marker=(2.0, 120.0),
+        footer_byte=analyze.GEOB_FOOTER,
+    )
+    assert data[0:2] == b'\x01\x01', (
+        f"Expected version bytes 0x01 0x01 (this-tool marker, D-07), "
+        f"got: {data[0:2].hex()} — pack_beatgrid must be updated to write b'\\x01\\x01'"
+    )
+
+
+def test_decode_both_versions():
+    """
+    decode_beatgrid() must round-trip beatgrids with EITHER version byte pattern:
+      b'\\x01\\x00' (Serato-written)  AND  b'\\x01\\x01' (this-tool-written).
+    RED until Task 2 updates decode_beatgrid() to accept both.
+    """
+    non_terminal = [(1.5, 16)]
+    terminal = (4.5, 128.0)
+
+    # Build a reference payload using pack_beatgrid (now writes 0x01 0x01)
+    data_new = analyze.pack_beatgrid(
+        non_terminal_markers=non_terminal,
+        terminal_marker=terminal,
+        footer_byte=analyze.GEOB_FOOTER,
+    )
+
+    # Build a payload manually with old version bytes 0x01 0x00 (Serato format)
+    data_old = bytearray(b'\x01\x00')
+    data_old += struct.pack('>I', len(non_terminal) + 1)
+    for pos, beats in non_terminal:
+        data_old += struct.pack('>fI', pos, beats)
+    data_old += struct.pack('>ff', terminal[0], terminal[1])
+    data_old += b'\x00'
+    data_old = bytes(data_old)
+
+    # Round-trip the old (Serato) version
+    nt_old, t_old = analyze.decode_beatgrid(data_old)
+    assert len(nt_old) == len(non_terminal), (
+        f"Old version byte decode: wrong marker count {len(nt_old)} vs {len(non_terminal)}"
+    )
+    assert abs(nt_old[0][0] - 1.5) < 1e-4, f"Old version: position wrong: {nt_old[0][0]}"
+    assert abs(t_old[1] - 128.0) < 1e-4, f"Old version: terminal BPM wrong: {t_old[1]}"
+
+    # Round-trip the new (this-tool) version — will fail if decode_beatgrid only accepts 0x01 0x00
+    nt_new, t_new = analyze.decode_beatgrid(data_new)
+    assert len(nt_new) == len(non_terminal), (
+        f"New version byte decode: wrong marker count {len(nt_new)} vs {len(non_terminal)}"
+    )
+    assert abs(nt_new[0][0] - 1.5) < 1e-4, f"New version: position wrong: {nt_new[0][0]}"
+    assert abs(t_new[1] - 128.0) < 1e-4, f"New version: terminal BPM wrong: {t_new[1]}"
