@@ -62,9 +62,10 @@ build/python-runtime/venv:
 	@echo "venv: Python 3.12 venv with all dependencies created"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# bundle-python: Copy venv + analyze.py into .app Resources
+# bundle-python: Copy venv + analyze.py + library.py into .app Resources
 # Layout: Resources/python-runtime/venv/bin/python3.12  (matches PythonBridge path)
 #         Resources/scripts/analyze.py
+#         Resources/scripts/library.py
 # ──────────────────────────────────────────────────────────────────────────────
 bundle-python: build/python-runtime/venv
 	rm -rf "$(PYTHON_RUNTIME)"
@@ -72,8 +73,9 @@ bundle-python: build/python-runtime/venv
 	cp -R build/python-runtime/venv "$(PYTHON_RUNTIME)/venv"
 	mkdir -p "$(SCRIPTS_DIR)"
 	cp python/analyze.py "$(SCRIPTS_DIR)/"
+	cp python/library.py "$(SCRIPTS_DIR)/"
 	chmod +x "$(PYTHON_RUNTIME)/venv/bin/python3.12"
-	@echo "bundle-python: venv + analyze.py embedded"
+	@echo "bundle-python: venv + analyze.py + library.py embedded"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # bundle-swift: Build Swift app via xcodebuild, copy .app into build/
