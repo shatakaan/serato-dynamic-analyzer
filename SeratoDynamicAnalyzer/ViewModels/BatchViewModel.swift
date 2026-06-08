@@ -166,7 +166,7 @@ class BatchViewModel: ObservableObject {
             isScanning = false
         } else {
             let ext = url.pathExtension.lowercased()
-            guard ["mp3", "aiff", "aif", "wav"].contains(ext) else { return }
+            guard ["mp3", "aiff", "aif", "wav", "m4a", "mp4"].contains(ext) else { return }
             appendUniqueURL(url)
         }
     }
@@ -183,7 +183,7 @@ class BatchViewModel: ObservableObject {
             ) else { return results }
             for case let fileURL as URL in enumerator {
                 let ext = fileURL.pathExtension.lowercased()
-                if ["mp3", "aiff", "aif", "wav"].contains(ext) {
+                if ["mp3", "aiff", "aif", "wav", "m4a", "mp4"].contains(ext) {
                     results.append(fileURL.standardizedFileURL)
                 }
             }
