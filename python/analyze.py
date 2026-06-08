@@ -29,7 +29,10 @@ import time
 from pathlib import Path
 from typing import Callable
 
+import base64
 import imageio_ffmpeg
+import mutagen.mp4
+from mutagen.mp4 import MP4FreeForm, AtomDataType
 import numpy as np
 import soundfile
 
@@ -49,11 +52,10 @@ ONSET_OFFSET_SECONDS: float = 0.030
 GEOB_FOOTER: bytes = b'\x00'
 
 # Allowed file extensions for CLI path validation (T-01-03 mitigation)
-ALLOWED_EXTENSIONS: frozenset = frozenset({'.mp3', '.aiff', '.aif', '.wav'})
+ALLOWED_EXTENSIONS: frozenset = frozenset({'.mp3', '.aiff', '.aif', '.wav', '.m4a', '.mp4'})
 
 # Supported extensions for load_audio() format dispatch (D-01, D-02, D-03, T-02-01)
-# M4A is explicitly deferred to Phase 5 (FMT-04, FMT-05).
-SUPPORTED_EXTENSIONS: set[str] = {'.mp3', '.aiff', '.aif', '.wav'}
+SUPPORTED_EXTENSIONS: set[str] = {'.mp3', '.aiff', '.aif', '.wav', '.m4a', '.mp4'}
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +118,26 @@ def load_audio(path: "Path | str") -> "tuple[np.ndarray, int]":
         audio, sr = soundfile.read(io.BytesIO(proc.stdout), dtype='float32')
 
         # Belt-and-suspenders: -ac 1 already forces mono, but downmix if needed
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+
+        return audio, int(sr)
+
+    elif path.suffix.lower() == '.m4a':
+        # D-06: M4A loading pipeline — same as MP3 but no -vn (M4A is audio-only container)
+        # T-05-02: cmd is a list — no shell=True, no shell interpolation of path
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        cmd = [ffmpeg_exe, '-i', str(path), '-f', 'wav', '-ar', '22050', '-ac', '1', 'pipe:1']
+        proc = subprocess.run(cmd, capture_output=True)
+
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"ffmpeg failed for {path}: "
+                f"{proc.stderr.decode(errors='replace')[:500]}"
+            )
+
+        audio, sr = soundfile.read(io.BytesIO(proc.stdout), dtype='float32')
+
         if audio.ndim > 1:
             audio = audio.mean(axis=1)
 
@@ -559,6 +581,49 @@ def write_geob_wav(path: Path, geob_bytes: bytes) -> None:
     wf.tags.save(str(path), v2_version=3)
 
 
+# ---------------------------------------------------------------------------
+# M4A/MP4 write functions (Phase 5 — FMT-04, FMT-05)
+# ---------------------------------------------------------------------------
+
+MP4_BEATGRID_KEY = '----:com.serato.dj:beatgrid'
+
+
+def _write_geob_mp4_container(path: Path, geob_bytes: bytes) -> None:
+    """
+    Shared helper for write_geob_m4a() and write_geob_mp4().
+
+    Both M4A and MP4 use the same MP4 free-form atom key and encoding.
+    The ONLY difference between the two formats is file extension routing
+    (handled by _select_write_fn) and the ffmpeg -vn flag in load_audio().
+
+    Encoding (per Holzhaus/serato-tags fileformats.md):
+      - FLAC-style wrapper: MIME + null + null + tag name + null + raw GEOB bytes
+      - base64-encode the wrapper WITHOUT padding (Serato requirement)
+      - Store as MP4FreeForm with AtomDataType.IMPLICIT (binary data)
+      - mutagen stores freeform values as list[MP4FreeForm]
+    """
+    MIME = b'application/octet-stream'
+    TAG_NAME = b'Serato BeatGrid'
+    wrapper = MIME + b'\x00\x00' + TAG_NAME + b'\x00' + geob_bytes
+    encoded = base64.b64encode(wrapper).rstrip(b'=')  # no padding — Serato requirement
+
+    af = mutagen.mp4.MP4(str(path))
+    if af.tags is None:
+        af.add_tags()
+    af.tags[MP4_BEATGRID_KEY] = [MP4FreeForm(encoded, dataformat=AtomDataType.IMPLICIT)]
+    af.save()
+
+
+def write_geob_m4a(path: Path, geob_bytes: bytes) -> None:
+    """Write Serato BeatGrid to M4A file using MP4 free-form atom (D-07, FMT-04)."""
+    _write_geob_mp4_container(path, geob_bytes)
+
+
+def write_geob_mp4(path: Path, geob_bytes: bytes) -> None:
+    """Write Serato BeatGrid to MP4 file using MP4 free-form atom (D-11, FMT-05)."""
+    _write_geob_mp4_container(path, geob_bytes)
+
+
 def create_backup(source_path: Path) -> Path:
     """
     Create a .serato-backup copy of the source audio file before writing (SAFE-01).
@@ -869,6 +934,10 @@ def _select_write_fn(path: Path) -> Callable[[Path, bytes], None]:
         return write_geob_aiff
     elif ext == '.wav':
         return write_geob_wav
+    elif ext == '.m4a':
+        return write_geob_m4a
+    elif ext == '.mp4':
+        return write_geob_mp4
     else:
         raise ValueError(f"No write function for extension: {ext!r}")
 
