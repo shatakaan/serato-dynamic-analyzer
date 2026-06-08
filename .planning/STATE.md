@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: Not started
-status: planning
-stopped_at: Phase 3 UI-SPEC approved
-last_updated: "2026-06-04T15:38:18.488Z"
+current_plan: 1
+status: executing
+stopped_at: Phase 4 complete
+last_updated: "2026-06-08T00:00:00.000Z"
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
-  percent: 60
+  completed_phases: 4
+  total_plans: 14
+  completed_plans: 14
+  percent: 80
 ---
 
 # State: Serato Dynamic Analyzer
@@ -20,25 +20,21 @@ progress:
 
 **Core value:** Ein DJ zieht einen Track rein (oder wählt seine Serato-Library), drückt "Analyze" — und bekommt ein taktgenaues dynamisches Beatgrid, das Serato direkt versteht.
 
-**Current focus:** Phase 03 — batch-queue-drag-drop-ui
+**Current focus:** Phase 05 — format-expansion-distribution
 
 ---
 
 ## Current Position
 
-Phase: 03 (batch-queue-drag-drop-ui) — EXECUTING
-Plan: 1 of 2
-**Current Plan:** Not started
-**Phase:** 4
-**Plan:** 02-04 COMPLETE (Task 1) — ContentView.swift full UI; Task 2 = checkpoint:human-verify (smoke test)
-**Status:** Ready to plan
+Phase: 05 (format-expansion-distribution) — NOT STARTED
+**Status:** Phase 04 complete — ready for Phase 05
 
 ```
-Progress: [x] [ ] [ ] [ ] [ ]
+Progress: [x] [x] [x] [x] [ ]
            1   2   3   4   5
 ```
 
-**Overall:** 1 of 5 phases complete (Phase 1 done; Phase 2 plans 01-04 done; 02-05 is last)
+**Overall:** 4 of 5 phases complete
 
 ---
 
@@ -135,11 +131,11 @@ Progress: [x] [ ] [ ] [ ] [ ]
 
 ## Session Continuity
 
-**Last session:** 2026-06-03T11:56:09.366Z
-**Stopped at:** Phase 3 UI-SPEC approved
-**Next action:** Execute Phase 2 Plan 02-05 — Makefile + signing + DMG (after smoke test passes)
+**Last session:** 2026-06-08
+**Stopped at:** Phase 4 complete — library loads, crate tree displays, pipeLines fix committed
+**Next action:** Plan and execute Phase 05 — M4A/MP4 via ffmpeg + signed notarized DMG
 
-**Swift layer status:** ContentView.swift fully implemented — drop zone, file picker, progress, result card, Dry Run toggle, Serato blocking alert, Python worker startup. BUILD SUCCEEDED.
+**Phase 4 IPC fix:** FileHandle.bytes.lines leaves stale DispatchSource on IPC pipes after cancellation. Library commands (listCrates/listTracks) now use pipeLines() — a readabilityHandler-based AsyncStream. See memory feedback_filehandle_bytes_lines.md.
 
 **Build note:** Always use `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild` — the /usr/bin/xcodebuild symlink fails with a license error.
 

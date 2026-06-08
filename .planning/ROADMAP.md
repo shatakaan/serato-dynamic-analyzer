@@ -11,7 +11,7 @@
 - [x] **Phase 1: Python Analysis Core** - Validate the central bet: analyze.py writes byte-exact GEOB tags that Serato accepts (completed 2026-06-02)
 - [x] **Phase 2: PythonBridge + Swift Integration** - Launch analysis from Swift for a single track; sign and notarize the app bundle (completed 2026-06-02)
 - [x] **Phase 3: Batch Queue + Drag & Drop UI** - Multi-track workflow: drop files, watch progress, read per-track results and errors (completed 2026-06-04)
-- [ ] **Phase 4: Serato Library Browser** - Browse crates, inspect existing beatgrids, send library tracks to the analysis queue
+- [x] **Phase 4: Serato Library Browser** - Browse crates, inspect existing beatgrids, send library tracks to the analysis queue (completed 2026-06-08)
 - [ ] **Phase 5: Format Expansion + Distribution** - M4A and MP4 support via ffmpeg; signed and notarized DMG for GitHub Releases
 
 ---
@@ -121,9 +121,10 @@
 **UI hint**: yes
 
 Plans:
-- [ ] 04-01-PLAN.md — Python backbone: library.py (crate tree, list_crates/list_tracks IPC, read_beatgrid_source), 0x01 0x01 version byte, test_library.py
-- [ ] 04-02-PLAN.md — Swift data layer: SeratoCrate/LibraryTrack models, PythonBridge listCrates/listTracks, LibraryViewModel (dedicated worker), BatchViewModel.addLibraryTrack
-- [ ] 04-03-PLAN.md — UI slice: kdWarning token, 6 Library views (HSplitView/OutlineGroup/track table/dot/CTA/empty state), ContentView TabView restructure, Makefile bundling, Serato version-byte human-verify gate
+
+- [x] 04-01-PLAN.md — Python backbone: library.py (crate tree, list_crates/list_tracks IPC, read_beatgrid_source), 0x01 0x01 version byte, test_library.py
+- [x] 04-02-PLAN.md — Swift data layer: SeratoCrate/LibraryTrack models, PythonBridge listCrates/listTracks, LibraryViewModel (dedicated worker), BatchViewModel.addLibraryTrack
+- [x] 04-03-PLAN.md — UI slice: kdWarning token, 6 Library views (HSplitView/OutlineGroup/track table/dot/CTA/empty state), ContentView TabView restructure, Makefile bundling, Serato version-byte human-verify gate
 
 ### Phase 5: Format Expansion + Distribution
 
@@ -147,7 +148,7 @@ Plans:
 | 1. Python Analysis Core | 4/4 | Complete    | 2026-06-02 |
 | 2. PythonBridge + Swift Integration | 5/5 | Complete    | 2026-06-03 |
 | 3. Batch Queue + Drag & Drop UI | 2/2 | Complete   | 2026-06-04 |
-| 4. Serato Library Browser | 0/3 | Planned | - |
+| 4. Serato Library Browser | 3/3 | Complete | 2026-06-08 |
 | 5. Format Expansion + Distribution | 0/? | Not started | - |
 
 ---
@@ -184,4 +185,4 @@ Plans:
 ---
 
 *Roadmap created: 2026-06-02*
-*Last updated: 2026-06-04 — Phase 4 planned (3 plans in 3 waves)*
+*Last updated: 2026-06-08 — Phase 4 complete*
