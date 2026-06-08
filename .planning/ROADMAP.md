@@ -135,9 +135,21 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
   1. Dragging an M4A or MP4 file into the queue produces a correct Serato BeatGrid tag that Serato DJ Pro reads without error
-  2. The GitHub Releases page contains a downloadable, signed `.dmg` that passes macOS Gatekeeper on a clean machine without any security warnings
+  2. The GitHub Releases page contains a downloadable, ad-hoc-signed `.dmg` with a README installation section that explains the one-time Gatekeeper bypass (`xattr -d com.apple.quarantine` or right-click → Open) (adjusted per D-01: no notarization, no Developer Account)
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+**Wave 1** *(M4A slice — test stubs + analyze.py M4A + Swift extension + Serato gate)*
+
+- [ ] 05-01-PLAN.md — M4A support slice: RED stubs (tests 11/13/14), minimal.m4a fixture, analyze.py M4A decode/write/_write_geob_mp4_container, Swift BatchViewModel + BatchQueueView accept .m4a, Serato gate (FMT-04)
+
+**Wave 2** *(MP4 slice — blocked on Wave 1 — shares _write_geob_mp4_container)*
+
+- [ ] 05-02-PLAN.md — MP4 support slice: RED stub (test 12), analyze.py MP4 decode (-vn) + write_geob_mp4, .mp4 in ALLOWED_EXTENSIONS + dispatch, Serato gate (FMT-05)
+
+**Wave 3** *(Distribution slice — blocked on Wave 2)*
+
+- [ ] 05-03-PLAN.md — Distribution slice: Makefile `publish` target (gh release create + push-all.sh), README Installation section with Gatekeeper bypass instructions
 
 ---
 
@@ -149,7 +161,7 @@ Plans:
 | 2. PythonBridge + Swift Integration | 5/5 | Complete    | 2026-06-03 |
 | 3. Batch Queue + Drag & Drop UI | 2/2 | Complete   | 2026-06-04 |
 | 4. Serato Library Browser | 3/3 | Complete | 2026-06-08 |
-| 5. Format Expansion + Distribution | 0/? | Not started | - |
+| 5. Format Expansion + Distribution | 0/3 | Not started | - |
 
 ---
 
@@ -185,4 +197,4 @@ Plans:
 ---
 
 *Roadmap created: 2026-06-02*
-*Last updated: 2026-06-08 — Phase 4 complete*
+*Last updated: 2026-06-08 — Phase 5 plans created (3 plans, 3 waves)*
