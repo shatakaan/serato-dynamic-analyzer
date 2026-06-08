@@ -209,6 +209,82 @@ def _make_minimal_wav(path: Path) -> None:
     path.write_bytes(riff_chunk)
 
 
+def _make_minimal_m4a(path: Path) -> None:
+    """
+    Create a minimal valid M4A file that mutagen.mp4.MP4 can open.
+    Strategy: copy the committed binary fixture at tests/fixtures/minimal.m4a.
+    See RESEARCH.md Open Question 1 and Pitfall 6.
+    """
+    import shutil
+    fixture = Path(__file__).parent / 'fixtures' / 'minimal.m4a'
+    if not fixture.exists():
+        raise FileNotFoundError(f"Binary fixture not found: {fixture}")
+    shutil.copy2(str(fixture), str(path))
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 Tests: M4A/MP4 write round-trips (tests 11, 13, 14)
+# ---------------------------------------------------------------------------
+
+def test_11_m4a_write(tmp_path):
+    """write_geob_m4a() must write a parseable MP4FreeForm atom at the correct key."""
+    import mutagen.mp4
+    m4a_file = tmp_path / 'test.m4a'
+    _make_minimal_m4a(m4a_file)
+    geob_bytes = analyze.pack_beatgrid(
+        non_terminal_markers=[(1.0, 8)],
+        terminal_marker=(2.0, 120.0),
+        footer_byte=analyze.GEOB_FOOTER,
+    )
+    analyze.write_geob_m4a(m4a_file, geob_bytes)
+    # Round-trip: mutagen must read the key back
+    af = mutagen.mp4.MP4(str(m4a_file))
+    assert '----:com.serato.dj:beatgrid' in af.tags, \
+        "MP4FreeForm atom not found at expected key"
+
+
+def test_13_m4a_geob_encoding_contract(tmp_path):
+    """
+    After write_geob_m4a(), base64-decoding the stored atom value must yield a
+    payload starting with b'application/octet-stream\\x00\\x00Serato BeatGrid\\x00'.
+    """
+    import base64
+    import mutagen.mp4
+    m4a_file = tmp_path / 'contract.m4a'
+    _make_minimal_m4a(m4a_file)
+    geob_bytes = analyze.pack_beatgrid(
+        non_terminal_markers=[(1.0, 8)],
+        terminal_marker=(2.0, 120.0),
+        footer_byte=analyze.GEOB_FOOTER,
+    )
+    analyze.write_geob_m4a(m4a_file, geob_bytes)
+    af = mutagen.mp4.MP4(str(m4a_file))
+    stored = bytes(af.tags['----:com.serato.dj:beatgrid'][0])
+    decoded = base64.b64decode(stored + b'==')  # add padding for decode
+    expected_prefix = b'application/octet-stream\x00\x00Serato BeatGrid\x00'
+    assert decoded.startswith(expected_prefix), \
+        f"FLAC wrapper missing. Decoded prefix: {decoded[:40]!r}"
+
+
+def test_14_m4a_atom_key(tmp_path):
+    """The MP4 atom key must be exactly '----:com.serato.dj:beatgrid' (all lowercase)."""
+    import mutagen.mp4
+    m4a_file = tmp_path / 'atomkey.m4a'
+    _make_minimal_m4a(m4a_file)
+    geob_bytes = analyze.pack_beatgrid(
+        non_terminal_markers=[(1.0, 8)],
+        terminal_marker=(2.0, 120.0),
+        footer_byte=analyze.GEOB_FOOTER,
+    )
+    analyze.write_geob_m4a(m4a_file, geob_bytes)
+    af = mutagen.mp4.MP4(str(m4a_file))
+    keys = list(af.tags.keys())
+    assert '----:com.serato.dj:beatgrid' in keys, \
+        f"Wrong atom key. Found: {keys}"
+    assert '----:com.serato.dj:Serato BeatGrid' not in keys, \
+        "Title-case key was written — must be all lowercase"
+
+
 def test_6_mp3_write_id3v23(tmp_path):
     """
     write_geob_mp3() must produce a file whose ID3 tag header starts with
