@@ -66,10 +66,10 @@ class LibraryViewModel: ObservableObject {
     // MARK: Data loading
 
     /// Load the full Serato crate tree from the Python library backend.
+    /// listCrates() handles worker start + single-session read (CR-03).
     func loadCrateTree() {
         Task {
             isLoadingCrates = true
-            if !isWorkerReady { await startLibraryWorker() }
             let tree = await libraryBridge.listCrates()
             crateTree = tree
             isLoadingCrates = false

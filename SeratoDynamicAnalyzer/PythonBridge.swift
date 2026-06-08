@@ -197,20 +197,27 @@ actor PythonBridge {
     // MARK: Library Commands (Plan 04-02)
 
     /// Send list_crates command and return the crate tree.
-    /// Restarts the worker if it crashed before issuing the command.
+    /// Starts the worker if not running. Reads "ready" + "crates" in ONE AsyncBytes
+    /// session to avoid the FileHandle.readabilityHandler race (CR-03: two successive
+    /// AsyncBytes on the same FileHandle can race during DispatchSource teardown —
+    /// data emitted by Python between teardown and re-install is silently lost).
     func listCrates() async -> [SeratoCrate] {
-        if !isWorkerRunning {
+        let needsStart = !isWorkerRunning
+        if needsStart {
             try? await startWorker()
-            _ = await waitForReady(timeout: 30)
         }
         let request: [String: Any] = ["cmd": "list_crates"]
         guard let data = try? JSONSerialization.data(withJSONObject: request),
               let line = String(data: data, encoding: .utf8) else { return [] }
+        // Write command before entering the read loop. The pipe buffers it; Python
+        // reads it after emitting "ready". Safe because stdin and stdout are independent.
         stdinPipe.fileHandleForWriting.write((line + "\n").data(using: .utf8)!)
 
         let handle = stdoutPipe.fileHandleForReading
         do {
             for try await rawLine in handle.bytes.lines {
+                // Skip "ready" if this is a fresh worker start (CR-03).
+                if needsStart, let evt = parseEvent(rawLine), case .ready = evt { continue }
                 guard let parsed = parseLibraryEvent(rawLine) else { continue }
                 switch parsed {
                 case .crates(let tree): return tree
@@ -223,11 +230,11 @@ actor PythonBridge {
     }
 
     /// Send list_tracks command and return tracks for the given crate path.
-    /// Restarts the worker if it crashed before issuing the command.
+    /// Same single-session read strategy as listCrates (CR-03).
     func listTracks(crate: String) async -> [LibraryTrack] {
-        if !isWorkerRunning {
+        let needsStart = !isWorkerRunning
+        if needsStart {
             try? await startWorker()
-            _ = await waitForReady(timeout: 30)
         }
         let request: [String: Any] = ["cmd": "list_tracks", "crate": crate]
         guard let data = try? JSONSerialization.data(withJSONObject: request),
@@ -237,6 +244,7 @@ actor PythonBridge {
         let handle = stdoutPipe.fileHandleForReading
         do {
             for try await rawLine in handle.bytes.lines {
+                if needsStart, let evt = parseEvent(rawLine), case .ready = evt { continue }
                 guard let parsed = parseLibraryEvent(rawLine) else { continue }
                 switch parsed {
                 case .tracks(let list): return list
