@@ -13,6 +13,7 @@ extension Color {
     static let kdOnSurface    = Color(kdHex: 0xE5E2E1)
     static let kdMuted        = Color(kdHex: 0x849495)
     static let kdOutline      = Color(kdHex: 0x3B494B)
+    static let kdWarning      = Color(kdHex: 0xF5C518)  // amber yellow — Serato beatgrid dot
 
     init(kdHex: UInt32) {
         let r = Double((kdHex >> 16) & 0xFF) / 255

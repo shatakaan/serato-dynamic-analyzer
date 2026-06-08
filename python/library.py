@@ -177,6 +177,54 @@ def _read_duration(file_path: str) -> "float | None":
         return None
 
 
+def _read_bpm(file_path: str) -> "float | None":
+    """
+    Read the BPM value from the first BeatGrid marker in the GEOB:Serato BeatGrid tag.
+    Returns None if no tag is present, the tag has no markers, or reading fails.
+    Supports .mp3, .aiff, .aif, .wav.
+    """
+    import struct
+
+    ext = os.path.splitext(file_path)[1].lower()
+    try:
+        if ext == ".mp3":
+            import mutagen.id3
+            tags = mutagen.id3.ID3(file_path)
+        elif ext in (".aiff", ".aif"):
+            import mutagen.aiff
+            af = mutagen.aiff.AIFF(file_path)
+            tags = af.tags
+        elif ext == ".wav":
+            import mutagen.wave
+            wf = mutagen.wave.WAVE(file_path)
+            tags = wf.tags
+        else:
+            return None
+
+        if tags is None or "GEOB:Serato BeatGrid" not in tags:
+            return None
+
+        data = tags["GEOB:Serato BeatGrid"].data
+        # BeatGrid binary layout (after 2-byte version header):
+        #   4 bytes big-endian uint32 = marker count
+        #   For each marker: 4 bytes float32 position_sec + 4 bytes float32 bpm
+        # (Holzhaus spec — first marker bpm is the canonical display value)
+        if len(data) < 2 + 4 + 4 + 4:
+            return None
+        offset = 2  # skip version bytes
+        marker_count = struct.unpack_from(">I", data, offset)[0]
+        offset += 4
+        if marker_count == 0:
+            return None
+        # First marker: position_sec (float32) + bpm (float32)
+        _position, bpm = struct.unpack_from(">ff", data, offset)
+        if bpm <= 0:
+            return None
+        return float(bpm)
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # IPC command handlers (D-05)
 # ---------------------------------------------------------------------------
@@ -250,12 +298,14 @@ def list_tracks(crate_path: str) -> None:
             filename = os.path.basename(full_path)
             source = read_beatgrid_source(full_path)
             duration = _read_duration(full_path)
+            bpm = _read_bpm(full_path)
             tracks.append(
                 {
                     "path": full_path,
                     "filename": filename,
                     "beatgrid_source": source,
                     "duration_sec": duration,
+                    "bpm": bpm,
                 }
             )
 
