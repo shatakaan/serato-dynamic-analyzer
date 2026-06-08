@@ -13,6 +13,7 @@ enum BridgeError: Error {
 
 enum LibraryEvent {
     case crates([SeratoCrate])
+    case cratesFile(String)    // path to temp JSON file (avoids pipe buffer overflow)
     case tracks([LibraryTrack])
     case error(String)
 }
@@ -194,46 +195,74 @@ actor PythonBridge {
         }
     }
 
+    // MARK: Pipe reading helper
+
+    /// Wraps FileHandle.readabilityHandler in an AsyncStream<String> yielding
+    /// newline-delimited lines. Use this instead of FileHandle.bytes.lines for
+    /// library IPC: bytes.lines leaves a stale DispatchSource after cancellation
+    /// that silently consumes subsequent pipe data (CR-03 root cause).
+    nonisolated func pipeLines(handle: FileHandle) -> AsyncStream<String> {
+        AsyncStream { continuation in
+            var buffer = ""
+            handle.readabilityHandler = { fh in
+                let data = fh.availableData
+                guard !data.isEmpty else {
+                    handle.readabilityHandler = nil
+                    continuation.finish()
+                    return
+                }
+                guard let chunk = String(data: data, encoding: .utf8) else { return }
+                buffer += chunk
+                while let newlineRange = buffer.range(of: "\n") {
+                    let line = String(buffer[buffer.startIndex..<newlineRange.lowerBound])
+                    buffer.removeSubrange(buffer.startIndex...newlineRange.lowerBound)
+                    continuation.yield(line)
+                }
+            }
+            continuation.onTermination = { _ in
+                handle.readabilityHandler = nil
+            }
+        }
+    }
+
     // MARK: Library Commands (Plan 04-02)
 
     /// Send list_crates command and return the crate tree.
-    /// Starts the worker if not running. Reads "ready" + "crates" in ONE AsyncBytes
-    /// session to avoid the FileHandle.readabilityHandler race (CR-03: two successive
-    /// AsyncBytes on the same FileHandle can race during DispatchSource teardown —
-    /// data emitted by Python between teardown and re-install is silently lost).
+    /// Uses pipeLines (readabilityHandler-based) to avoid bytes.lines DispatchSource
+    /// stale-reader bug on IPC pipes (CR-03).
     func listCrates() async -> [SeratoCrate] {
-        let needsStart = !isWorkerRunning
-        if needsStart {
-            try? await startWorker()
+        if !isWorkerRunning {
+            do { try await startWorker() } catch { return [] }
         }
         let request: [String: Any] = ["cmd": "list_crates"]
         guard let data = try? JSONSerialization.data(withJSONObject: request),
               let line = String(data: data, encoding: .utf8) else { return [] }
-        // Write command before entering the read loop. The pipe buffers it; Python
-        // reads it after emitting "ready". Safe because stdin and stdout are independent.
         stdinPipe.fileHandleForWriting.write((line + "\n").data(using: .utf8)!)
 
         let handle = stdoutPipe.fileHandleForReading
-        do {
-            for try await rawLine in handle.bytes.lines {
-                // Skip "ready" if this is a fresh worker start (CR-03).
-                if needsStart, let evt = parseEvent(rawLine), case .ready = evt { continue }
-                guard let parsed = parseLibraryEvent(rawLine) else { continue }
-                switch parsed {
-                case .crates(let tree): return tree
-                case .error:            return []
-                default:                continue
+        for await rawLine in pipeLines(handle: handle) {
+            if let evt = parseEvent(rawLine), case .ready = evt { continue }
+            guard let parsed = parseLibraryEvent(rawLine) else { continue }
+            switch parsed {
+            case .crates(let tree): return tree
+            case .cratesFile(let path):
+                if let fileData = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                   let rawTree = try? JSONSerialization.jsonObject(with: fileData) as? [[String: Any]] {
+                    try? FileManager.default.removeItem(atPath: path)
+                    return rawTree.map { SeratoCrate(json: $0) }
                 }
+                return []
+            case .error: return []
+            default: continue
             }
-        } catch {}
+        }
         return []
     }
 
     /// Send list_tracks command and return tracks for the given crate path.
-    /// Same single-session read strategy as listCrates (CR-03).
+    /// Same pipeLines strategy as listCrates (CR-03).
     func listTracks(crate: String) async -> [LibraryTrack] {
-        let needsStart = !isWorkerRunning
-        if needsStart {
+        if !isWorkerRunning {
             try? await startWorker()
         }
         let request: [String: Any] = ["cmd": "list_tracks", "crate": crate]
@@ -242,17 +271,15 @@ actor PythonBridge {
         stdinPipe.fileHandleForWriting.write((line + "\n").data(using: .utf8)!)
 
         let handle = stdoutPipe.fileHandleForReading
-        do {
-            for try await rawLine in handle.bytes.lines {
-                if needsStart, let evt = parseEvent(rawLine), case .ready = evt { continue }
-                guard let parsed = parseLibraryEvent(rawLine) else { continue }
-                switch parsed {
-                case .tracks(let list): return list
-                case .error:            return []
-                default:                continue
-                }
+        for await rawLine in pipeLines(handle: handle) {
+            if let evt = parseEvent(rawLine), case .ready = evt { continue }
+            guard let parsed = parseLibraryEvent(rawLine) else { continue }
+            switch parsed {
+            case .tracks(let list): return list
+            case .error:            return []
+            default:                continue
             }
-        } catch {}
+        }
         return []
     }
 
@@ -266,6 +293,8 @@ actor PythonBridge {
         case "crates":
             let rawTree = json["tree"] as? [[String: Any]] ?? []
             return .crates(rawTree.map { SeratoCrate(json: $0) })
+        case "crates_file":
+            return .cratesFile(json["path"] as? String ?? "")
         case "tracks":
             let rawList = json["tracks"] as? [[String: Any]] ?? []
             return .tracks(rawList.map { LibraryTrack(json: $0) })

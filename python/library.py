@@ -232,7 +232,13 @@ def _read_bpm(file_path: str) -> "float | None":
 def list_crates() -> None:
     """
     Resolve the Serato Subcrates directory, build the crate tree, and emit:
-      {"type":"crates","tree":[...]}
+      {"type":"crates_file","path":"/tmp/serato_crates_XXXX.json"}
+
+    Writes the tree to a temp file to avoid macOS pipe buffer overflow
+    (real-world trees exceed the 65KB pipe buffer, causing a write/read deadlock).
+    Swift reads the file on receipt of "crates_file" and deletes it.
+
+    Falls back to inline {"type":"crates","tree":[]} for empty/missing dirs.
 
     Path resolution order:
       1. SERATO_SUBCRATES_DIR environment variable (for tests / overrides)
@@ -240,6 +246,7 @@ def list_crates() -> None:
 
     Wraps everything in try/except to keep the worker alive on errors (T-04-DOS).
     """
+    import tempfile
     try:
         subcrates_dir_env = os.environ.get("SERATO_SUBCRATES_DIR")
         if subcrates_dir_env:
@@ -252,7 +259,12 @@ def list_crates() -> None:
             return
 
         tree = build_crate_tree(subcrates_dir)
-        emit_json({"type": "crates", "tree": tree})
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, prefix="serato_crates_"
+        ) as f:
+            json.dump(tree, f)
+            tmp_path = f.name
+        emit_json({"type": "crates_file", "path": tmp_path})
     except Exception as exc:
         emit_error("", f"list_crates failed: {exc}")
 
