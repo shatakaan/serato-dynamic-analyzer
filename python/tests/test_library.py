@@ -240,9 +240,18 @@ def test_list_crates_ipc(tmp_path):
 
     assert response_line, "No response received for list_crates command"
     event = json.loads(response_line)
-    assert event["type"] == "crates", f"Expected type 'crates', got: {event['type']!r}"
-    assert "tree" in event, f"Expected 'tree' key in crates event, got keys: {list(event.keys())}"
-    assert isinstance(event["tree"], list), f"Expected 'tree' to be a list"
+    assert event["type"] in ("crates", "crates_file"), (
+        f"Expected type 'crates' or 'crates_file', got: {event['type']!r}"
+    )
+    if event["type"] == "crates_file":
+        import json as _json
+        with open(event["path"]) as _f:
+            tree = _json.load(_f)
+        os.unlink(event["path"])
+    else:
+        assert "tree" in event, f"Expected 'tree' key in crates event, got keys: {list(event.keys())}"
+        tree = event["tree"]
+    assert isinstance(tree, list), f"Expected tree to be a list"
 
 
 # ---------------------------------------------------------------------------
