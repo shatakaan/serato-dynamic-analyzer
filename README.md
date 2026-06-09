@@ -8,7 +8,7 @@ A native macOS SwiftUI app that performs dynamic BPM/beatgrid analysis for Serat
 
 ### Download
 
-**[Download SeratoDynamicAnalyzer-v0.1.0-beta.1.dmg](https://github.com/shatakaan/serato-dynamic-analyzer/releases/download/v0.1.0-beta.1/SeratoDynamicAnalyzer-v0.1.0-beta.1.dmg)** (beta)
+**[Download SeratoDynamicAnalyzer.dmg](https://github.com/shatakaan/serato-dynamic-analyzer/releases/download/v0.1.0-beta.1/SeratoDynamicAnalyzer.dmg)** (v0.1.0-beta.1)
 
 Or browse all releases on the [Releases page](https://github.com/shatakaan/serato-dynamic-analyzer/releases).
 
@@ -18,7 +18,7 @@ Open the DMG and drag `SeratoDynamicAnalyzer.app` to your Applications folder.
 
 This app is ad-hoc signed (not notarized by Apple). macOS will block it on first launch. Use one of the two options below to open it:
 
-**Option A: Right-click method (no Terminal required)**
+#### Option A: Right-click method (no Terminal required)
 
 1. Right-click `SeratoDynamicAnalyzer.app` in Finder.
 2. Select "Open" from the context menu.
@@ -26,9 +26,9 @@ This app is ad-hoc signed (not notarized by Apple). macOS will block it on first
 
 You only need to do this once. After the first approved launch, the app opens normally.
 
-**Option B: Terminal command**
+#### Option B: Terminal command
 
-```
+```sh
 xattr -d com.apple.quarantine /Applications/SeratoDynamicAnalyzer.app
 ```
 
@@ -57,7 +57,7 @@ This app performs dynamic beatgrid analysis using librosa and writes the result 
 
 ### Build from Source
 
-```
+```sh
 make release
 ```
 
@@ -65,7 +65,7 @@ This runs the full pipeline: Python venv setup, Swift build via Xcode, ad-hoc co
 
 ### Release
 
-```
+```sh
 git tag vX.Y.Z
 make publish
 ```
