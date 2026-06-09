@@ -243,6 +243,26 @@ def test_11_m4a_write(tmp_path):
         "MP4FreeForm atom not found at expected key"
 
 
+def test_12_mp4_write(tmp_path):
+    """write_geob_mp4() must write a parseable MP4FreeForm atom at the correct key.
+
+    Uses _make_minimal_m4a() with a .mp4 extension — M4A and MP4 share the MP4
+    box container format, so the same fixture works for both (D-11, FMT-05).
+    """
+    import mutagen.mp4
+    mp4_file = tmp_path / 'test.mp4'
+    _make_minimal_m4a(mp4_file)
+    geob_bytes = analyze.pack_beatgrid(
+        non_terminal_markers=[(1.0, 8)],
+        terminal_marker=(2.0, 120.0),
+        footer_byte=analyze.GEOB_FOOTER,
+    )
+    analyze.write_geob_mp4(mp4_file, geob_bytes)
+    af = mutagen.mp4.MP4(str(mp4_file))
+    assert '----:com.serato.dj:beatgrid' in af.tags, \
+        "MP4FreeForm atom not found at expected key after write_geob_mp4()"
+
+
 def test_13_m4a_geob_encoding_contract(tmp_path):
     """
     After write_geob_m4a(), base64-decoding the stored atom value must yield a
