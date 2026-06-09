@@ -62,6 +62,38 @@ SUPPORTED_EXTENSIONS: set[str] = {'.mp3', '.aiff', '.aif', '.wav', '.m4a', '.mp4
 # Audio Loading
 # ---------------------------------------------------------------------------
 
+def _load_via_ffmpeg(path: Path, extra_args: "list[str]" = ()) -> "tuple[np.ndarray, int]":
+    """Decode any audio format via ffmpeg pipe → soundfile → float32 mono @ 22050 Hz.
+
+    Args:
+        path: Resolved Path to the audio file.
+        extra_args: Extra flags inserted before the output format flags.
+                    Use ['-vn'] for MP4 to discard the video stream (D-10).
+
+    Returns:
+        Tuple of (audio_float32_mono, sample_rate_int).
+
+    Raises:
+        RuntimeError: If ffmpeg exits with a non-zero return code.
+    """
+    # imageio_ffmpeg ships a pre-built static ffmpeg binary; never hardcode a path.
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    # T-02-03: cmd is a list — no shell=True, no shell interpolation of path
+    cmd = [ffmpeg_exe, '-i', str(path), *extra_args,
+           '-f', 'wav', '-ar', '22050', '-ac', '1', 'pipe:1']
+    proc = subprocess.run(cmd, capture_output=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg failed for {path}: "
+            f"{proc.stderr.decode(errors='replace')[:500]}"
+        )
+    audio, sr = soundfile.read(io.BytesIO(proc.stdout), dtype='float32')
+    # Belt-and-suspenders: -ac 1 already forces mono, but downmix if needed
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)
+    return audio, int(sr)
+
+
 def load_audio(path: "Path | str") -> "tuple[np.ndarray, int]":
     """
     Load an audio file and return a float32 mono array at 22050 Hz.
@@ -100,69 +132,15 @@ def load_audio(path: "Path | str") -> "tuple[np.ndarray, int]":
 
     if path.suffix.lower() == '.mp3':
         # D-01, D-02: MP3 loading pipeline — ffmpeg via imageio_ffmpeg → WAV pipe → soundfile
-        # imageio_ffmpeg ships a pre-built static ffmpeg binary; never hardcode a path.
-        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-
-        # -ar 22050: downsample to librosa default (reduces memory per MR-1 mitigation)
-        # -ac 1: force mono from ffmpeg itself (belt-and-suspenders before soundfile.read)
-        # T-02-03: cmd is a list — no shell=True, no shell interpolation of path
-        cmd = [ffmpeg_exe, '-i', str(path), '-f', 'wav', '-ar', '22050', '-ac', '1', 'pipe:1']
-        proc = subprocess.run(cmd, capture_output=True)
-
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"ffmpeg failed for {path}: "
-                f"{proc.stderr.decode(errors='replace')[:500]}"
-            )
-
-        audio, sr = soundfile.read(io.BytesIO(proc.stdout), dtype='float32')
-
-        # Belt-and-suspenders: -ac 1 already forces mono, but downmix if needed
-        if audio.ndim > 1:
-            audio = audio.mean(axis=1)
-
-        return audio, int(sr)
+        return _load_via_ffmpeg(path)
 
     elif path.suffix.lower() == '.m4a':
-        # D-06: M4A loading pipeline — same as MP3 but no -vn (M4A is audio-only container)
-        # T-05-02: cmd is a list — no shell=True, no shell interpolation of path
-        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-        cmd = [ffmpeg_exe, '-i', str(path), '-f', 'wav', '-ar', '22050', '-ac', '1', 'pipe:1']
-        proc = subprocess.run(cmd, capture_output=True)
-
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"ffmpeg failed for {path}: "
-                f"{proc.stderr.decode(errors='replace')[:500]}"
-            )
-
-        audio, sr = soundfile.read(io.BytesIO(proc.stdout), dtype='float32')
-
-        if audio.ndim > 1:
-            audio = audio.mean(axis=1)
-
-        return audio, int(sr)
+        # D-06: M4A loading pipeline — same as MP3; no -vn (M4A is audio-only container)
+        return _load_via_ffmpeg(path)
 
     elif path.suffix.lower() == '.mp4':
-        # D-10: MP4 loading pipeline — like M4A but with -vn to extract audio stream only.
-        # MP4 is a video container; -vn discards the video stream before decoding.
-        # T-05-02: cmd is a list — no shell=True, no shell interpolation of path
-        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-        cmd = [ffmpeg_exe, '-i', str(path), '-vn', '-f', 'wav', '-ar', '22050', '-ac', '1', 'pipe:1']
-        proc = subprocess.run(cmd, capture_output=True)
-
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"ffmpeg failed for {path}: "
-                f"{proc.stderr.decode(errors='replace')[:500]}"
-            )
-
-        audio, sr = soundfile.read(io.BytesIO(proc.stdout), dtype='float32')
-
-        if audio.ndim > 1:
-            audio = audio.mean(axis=1)
-
-        return audio, int(sr)
+        # D-10: MP4 loading pipeline — -vn discards the video stream before decoding
+        return _load_via_ffmpeg(path, ['-vn'])
 
     else:
         # D-03: AIFF and WAV — soundfile handles them natively via libsndfile
