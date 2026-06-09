@@ -1,4 +1,12 @@
 .planning/
+.claude/
+.vscode/
+Design Ideen/
+TestTracks/
+scripts/
+CLAUDE.md
+SeratoDynamicAnalyzer.xcodeproj/xcuserdata/
+SeratoDynamicAnalyzer.xcodeproj/project.xcworkspace/xcuserdata/
 python/venv/
 __pycache__/
 *.pyc
