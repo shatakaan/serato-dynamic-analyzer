@@ -29,7 +29,7 @@ def test_1_endianness():
     """
     pack_beatgrid with one non-terminal marker (1.5s, 16 beats) and a terminal
     marker (4.5s, 128.0 BPM) must produce:
-    - bytes[0:2] = b'\\x01\\x00' (version)
+    - bytes[0:2] = b'\\x01\\x01' (this-tool version byte per D-07)
     - bytes[2:6] = uint32 BE total count == 2 (1 non-terminal + 1 terminal)
     - bytes[6:10] decode as big-endian float32 == 1.5 (non-terminal position)
     - bytes[10:14] decode as big-endian uint32 == 16 (beats_till_next)

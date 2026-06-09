@@ -274,7 +274,7 @@ def pack_beatgrid(
     Encode Serato BeatGrid markers to the canonical GEOB binary payload.
 
     Binary layout (all multi-byte values are big-endian per CR-1, D-12):
-      [version: 2 bytes = \x01\x00]
+      [version: 2 bytes = \x01\x01 (this tool, D-07) or \x01\x00 (Serato-written, accepted by decode_beatgrid)]
       [count:   4 bytes = uint32 BE, TOTAL markers = len(non_terminal) + 1 (terminal)]
       [non-terminal marker 0: 8 bytes = >f position + >I beats_till_next] * N
       [terminal marker: 8 bytes = >f position + >f bpm]
