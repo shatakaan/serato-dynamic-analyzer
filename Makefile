@@ -101,10 +101,12 @@ bundle-swift:
 
 # ──────────────────────────────────────────────────────────────────────────────
 # sign: Bottom-up ad-hoc code signing (D-12, D-13, CLAUDE.md signing order)
-# Order: 1) all .so/.dylib in venv  2) outer .app with entitlements
+# Order: 1) all .so/.dylib in venv  2) venv/bin executables  3) outer .app
 # ──────────────────────────────────────────────────────────────────────────────
 sign:
 	find "$(PYTHON_RUNTIME)/venv" \( -name "*.dylib" -o -name "*.so" \) \
+	    | xargs -I{} codesign --force --sign - --options runtime "{}"
+	find "$(PYTHON_RUNTIME)/venv/bin" -type f -perm +111 \
 	    | xargs -I{} codesign --force --sign - --options runtime "{}"
 	codesign --force --sign - --options runtime \
 	    --entitlements "$(ENTITLEMENTS)" \
