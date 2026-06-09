@@ -34,7 +34,7 @@ DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 # Entitlements (D-13: allow-unsigned-executable-memory + disable-library-validation)
 ENTITLEMENTS := SeratoDynamicAnalyzer/Resources/SeratoDynamicAnalyzer.entitlements
 
-.PHONY: release deps bundle-python bundle-swift sign dmg clean distclean
+.PHONY: release deps bundle-python bundle-swift sign dmg clean distclean publish
 
 # ──────────────────────────────────────────────────────────────────────────────
 # release: One-command pipeline (D-10)
@@ -121,6 +121,24 @@ dmg:
 	    -ov -format UDZO \
 	    "build/$(APP_NAME).dmg"
 	@echo "dmg: build/$(APP_NAME).dmg created"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# publish: One-command GitHub Release pipeline (D-02, D-03)
+# Usage: git tag vX.Y.Z && make publish
+# Requires: gh CLI authenticated (gh auth login), tag already created locally.
+# Pushes tag to origin, then to both remotes via scripts/push-all.sh.
+# ──────────────────────────────────────────────────────────────────────────────
+publish: release
+	@VERSION=$$(git describe --tags --abbrev=0) && \
+	echo "Publishing release $$VERSION..." && \
+	git push origin "$$VERSION" && \
+	./scripts/push-all.sh && \
+	gh release create "$$VERSION" \
+	    "build/$(APP_NAME).dmg#$(APP_NAME)-$$VERSION.dmg" \
+	    --title "Serato Dynamic Analyzer $$VERSION" \
+	    --generate-notes \
+	    --repo shatakaan/serato-dynamic-analyzer
+	@echo "publish: GitHub Release published"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # clean: Remove build artifacts (keeps venv cache at build/python-runtime/venv)
