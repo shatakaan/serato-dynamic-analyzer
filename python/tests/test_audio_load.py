@@ -8,8 +8,10 @@ Test coverage:
   2. AIFF dispatch — calls soundfile.read directly, NOT imageio_ffmpeg
   3. WAV dispatch — calls soundfile.read directly, NOT imageio_ffmpeg
   4. Mono conversion — stereo soundfile output is downmixed to shape (N,)
-  5. Unsupported format — ValueError raised before any I/O for .m4a
+  5. Unsupported format — ValueError raised before any I/O for .xyz
   6. ffmpeg error — RuntimeError with file path when returncode != 0
+  7. M4A dispatch — calls imageio_ffmpeg.get_ffmpeg_exe(), returns (array, sr), no -vn flag
+  8. MP4 dispatch — calls imageio_ffmpeg.get_ffmpeg_exe(), returns (array, sr), -vn flag present
 """
 import io
 import struct
@@ -261,3 +263,79 @@ class TestFfmpegError:
         assert "broken.mp3" in error_msg or str(mp3_file) in error_msg, (
             f"RuntimeError should include the file path, got: {error_msg!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test 7: M4A dispatch — no -vn flag (audio-only container)
+# ---------------------------------------------------------------------------
+
+class TestM4aDispatch:
+    """load_audio('track.m4a') calls imageio_ffmpeg.get_ffmpeg_exe() — no -vn flag (M4A is audio-only container)."""
+
+    def test_m4a_calls_ffmpeg_without_vn(self, tmp_path):
+        """M4A branch: imageio_ffmpeg.get_ffmpeg_exe() is called; -vn must NOT be in the ffmpeg cmd."""
+        import analyze
+
+        m4a_file = tmp_path / "track.m4a"
+        m4a_file.write_bytes(b"\x00\x00\x00\x20ftyp")  # M4A magic prefix
+
+        fake_ffmpeg_path = "/fake/ffmpeg"
+        fake_proc = MagicMock()
+        fake_proc.returncode = 0
+        fake_proc.stdout = WAV_FIXTURE_BYTES
+
+        ffmpeg_called_with = []
+
+        def fake_get_ffmpeg_exe():
+            ffmpeg_called_with.append(True)
+            return fake_ffmpeg_path
+
+        mock_run = MagicMock(return_value=fake_proc)
+
+        with patch("analyze.imageio_ffmpeg.get_ffmpeg_exe", side_effect=fake_get_ffmpeg_exe), \
+             patch("analyze.subprocess.run", mock_run):
+            audio, sr = analyze.load_audio(m4a_file)
+
+        assert ffmpeg_called_with, "imageio_ffmpeg.get_ffmpeg_exe() was not called"
+        cmd_used = mock_run.call_args[0][0]
+        assert '-vn' not in cmd_used, f"-vn must not appear in M4A ffmpeg cmd, got: {cmd_used}"
+        assert isinstance(audio, np.ndarray), f"Expected ndarray, got {type(audio)}"
+        assert isinstance(sr, int), f"Expected int sample rate, got {type(sr)}"
+
+
+# ---------------------------------------------------------------------------
+# Test 8: MP4 dispatch — -vn flag present (video container, discard video stream)
+# ---------------------------------------------------------------------------
+
+class TestMp4Dispatch:
+    """load_audio('track.mp4') calls imageio_ffmpeg.get_ffmpeg_exe() with -vn flag (video container — discard video stream)."""
+
+    def test_mp4_calls_ffmpeg_with_vn(self, tmp_path):
+        """MP4 branch: imageio_ffmpeg.get_ffmpeg_exe() is called; -vn MUST be in the ffmpeg cmd."""
+        import analyze
+
+        mp4_file = tmp_path / "track.mp4"
+        mp4_file.write_bytes(b"\x00\x00\x00\x20ftyp")  # MP4/M4A share the same ftyp magic
+
+        fake_ffmpeg_path = "/fake/ffmpeg"
+        fake_proc = MagicMock()
+        fake_proc.returncode = 0
+        fake_proc.stdout = WAV_FIXTURE_BYTES
+
+        ffmpeg_called_with = []
+
+        def fake_get_ffmpeg_exe():
+            ffmpeg_called_with.append(True)
+            return fake_ffmpeg_path
+
+        mock_run = MagicMock(return_value=fake_proc)
+
+        with patch("analyze.imageio_ffmpeg.get_ffmpeg_exe", side_effect=fake_get_ffmpeg_exe), \
+             patch("analyze.subprocess.run", mock_run):
+            audio, sr = analyze.load_audio(mp4_file)
+
+        assert ffmpeg_called_with, "imageio_ffmpeg.get_ffmpeg_exe() was not called"
+        cmd_used = mock_run.call_args[0][0]
+        assert '-vn' in cmd_used, f"-vn must appear in MP4 ffmpeg cmd, got: {cmd_used}"
+        assert isinstance(audio, np.ndarray), f"Expected ndarray, got {type(audio)}"
+        assert isinstance(sr, int), f"Expected int sample rate, got {type(sr)}"
