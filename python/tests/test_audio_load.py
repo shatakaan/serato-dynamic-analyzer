@@ -196,17 +196,20 @@ class TestMonoConversion:
 # ---------------------------------------------------------------------------
 
 class TestUnsupportedFormat:
-    """load_audio with .m4a raises ValueError before any I/O."""
+    """load_audio raises ValueError for truly unsupported formats before any I/O.
 
-    def test_m4a_raises_value_error(self, tmp_path):
-        """M4A is explicitly unsupported in Phase 1; must raise ValueError immediately."""
+    M4A (.m4a) is now supported as of Phase 5 (FMT-04). Tests updated accordingly.
+    """
+
+    def test_unsupported_format_raises_value_error(self, tmp_path):
+        """A genuinely unsupported extension (e.g. .xyz) must raise ValueError immediately."""
         import analyze
 
-        m4a_file = tmp_path / "track.m4a"
-        m4a_file.write_bytes(b"\x00\x00\x00\x20ftyp")  # Fake M4A magic
+        xyz_file = tmp_path / "track.xyz"
+        xyz_file.write_bytes(b"\x00\x00\x00\x20test")  # Fake content
 
         with pytest.raises(ValueError) as exc_info:
-            analyze.load_audio(m4a_file)
+            analyze.load_audio(xyz_file)
 
         msg = str(exc_info.value).lower()
         assert "unsupported" in msg, (
@@ -217,13 +220,13 @@ class TestUnsupportedFormat:
         """Verify no I/O occurs for unsupported format (soundfile.read must not be called)."""
         import analyze
 
-        m4a_file = tmp_path / "track.m4a"
-        m4a_file.write_bytes(b"\x00\x00\x00\x20ftyp")
+        xyz_file = tmp_path / "track.xyz"
+        xyz_file.write_bytes(b"\x00\x00\x00\x20test")
 
         with patch("analyze.soundfile.read") as mock_sf, \
              patch("analyze.subprocess.run") as mock_proc:
             with pytest.raises(ValueError):
-                analyze.load_audio(m4a_file)
+                analyze.load_audio(xyz_file)
             mock_sf.assert_not_called()
             mock_proc.assert_not_called()
 

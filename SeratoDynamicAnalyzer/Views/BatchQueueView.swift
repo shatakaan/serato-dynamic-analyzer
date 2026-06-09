@@ -96,6 +96,8 @@ struct BatchQueueView: View {
             UTType(filenameExtension: "aiff") ?? .audio,
             UTType(filenameExtension: "aif")  ?? .audio,
             UTType(filenameExtension: "wav")  ?? .audio,
+            UTType.mpeg4Audio,   // .m4a — FMT-04
+            UTType.mpeg4Movie,   // .mp4 — FMT-05
         ]
         if panel.runModal() == .OK {
             for url in panel.urls {
