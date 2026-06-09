@@ -391,6 +391,7 @@ def decode_beatgrid(data: bytes) -> tuple[list[tuple[float, int]], tuple[float, 
 def encode_markers(
     beat_positions_seconds: list[float],
     bpm_delta_threshold: float = 0.5,
+    _depth: int = 0,
 ) -> tuple[list[tuple[float, int]], tuple[float, float]]:
     """
     Convert a list of beat positions (already onset-offset-corrected) into
@@ -471,10 +472,16 @@ def encode_markers(
     # 128-marker ceiling check (HR-2, D-10)
     # Max non-terminal = 127 (reserving 1 slot for the mandatory terminal marker)
     if len(non_terminal) >= 128:
+        if _depth >= 20:
+            raise ValueError(
+                f"encode_markers: cannot reduce marker count below 128 "
+                f"after {_depth} retries (final threshold={bpm_delta_threshold:.2f} BPM)"
+            )
         # Adaptively increase threshold and retry (recursive)
         return encode_markers(
             beat_positions_seconds=beat_positions_seconds,
             bpm_delta_threshold=bpm_delta_threshold * 2,
+            _depth=_depth + 1,
         )
 
     return non_terminal, terminal
