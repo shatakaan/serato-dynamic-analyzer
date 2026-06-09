@@ -15,10 +15,16 @@ Test coverage:
 """
 import io
 import struct
+import sys
 import types
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+# Add the python/ directory to sys.path so `import analyze` works when pytest
+# is invoked from the repository root (matches pattern in test_geob.py lines 18-19).
+PYTHON_DIR = Path(__file__).parent.parent
+sys.path.insert(0, str(PYTHON_DIR))
 
 import numpy as np
 import pytest
