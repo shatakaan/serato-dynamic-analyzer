@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 5 context gathered
-last_updated: "2026-06-08T14:52:28.188Z"
+status: executing
+stopped_at: Phase 05 Plan 01 complete — M4A gate PASSED
+last_updated: "2026-06-09T18:20:11.306Z"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 14
-  completed_plans: 13
+  total_plans: 17
+  completed_plans: 15
   percent: 60
 ---
 
@@ -25,8 +25,9 @@ progress:
 
 ## Current Position
 
-Phase: 05 (format-expansion-distribution) — NOT STARTED
-**Status:** Phase 04 complete — ready for Phase 05
+Phase: 05 (format-expansion-distribution) — EXECUTING
+Plan: 3 of 3
+**Status:** Ready to execute
 
 ```
 Progress: [x] [x] [x] [x] [ ]
@@ -62,6 +63,8 @@ Progress: [x] [x] [x] [x] [ ]
 | Phase 2 Plan 02-04 builds | BUILD SUCCEEDED — ContentView.swift full UI, all acceptance criteria passed |
 
 ---
+| Phase 05 P01 | 2700 | 4 tasks | 5 files |
+| Phase 05-format-expansion-distribution P02 | 15 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -130,8 +133,8 @@ Progress: [x] [x] [x] [x] [ ]
 
 ## Session Continuity
 
-**Last session:** 2026-06-08T14:52:28.182Z
-**Stopped at:** Phase 5 context gathered
+**Last session:** 2026-06-09T18:20:11.299Z
+**Stopped at:** Phase 05 Plan 01 complete — M4A gate PASSED
 **Next action:** Plan and execute Phase 05 — M4A/MP4 via ffmpeg + signed notarized DMG
 
 **Phase 4 IPC fix:** FileHandle.bytes.lines leaves stale DispatchSource on IPC pipes after cancellation. Library commands (listCrates/listTracks) now use pipeLines() — a readabilityHandler-based AsyncStream. See memory feedback_filehandle_bytes_lines.md.
@@ -142,3 +145,8 @@ Progress: [x] [x] [x] [x] [ ]
 
 *State initialized: 2026-06-02*
 *Last updated: 2026-06-02 — Phase 2 Plan 02-02 complete*
+
+## Decisions
+
+- [Phase ?]: M4A GEOB atom key is lowercase '----:com.serato.dj:beatgrid' — Serato scanner ignores title-case key
+- [Phase ?]: FLAC wrapper prefix + base64 no-padding required for M4A GEOB atoms — Serato rejects padded base64

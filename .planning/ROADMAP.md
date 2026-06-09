@@ -141,11 +141,11 @@ Plans:
 
 **Wave 1** *(M4A slice — test stubs + analyze.py M4A + Swift extension + Serato gate)*
 
-- [ ] 05-01-PLAN.md — M4A support slice: RED stubs (tests 11/13/14), minimal.m4a fixture, analyze.py M4A decode/write/_write_geob_mp4_container, Swift BatchViewModel + BatchQueueView accept .m4a, Serato gate (FMT-04)
+- [x] 05-01-PLAN.md — M4A support slice: RED stubs (tests 11/13/14), minimal.m4a fixture, analyze.py M4A decode/write/_write_geob_mp4_container, Swift BatchViewModel + BatchQueueView accept .m4a, Serato gate (FMT-04)
 
 **Wave 2** *(MP4 slice — blocked on Wave 1 — shares _write_geob_mp4_container)*
 
-- [ ] 05-02-PLAN.md — MP4 support slice: RED stub (test 12), analyze.py MP4 decode (-vn) + write_geob_mp4, .mp4 in ALLOWED_EXTENSIONS + dispatch, Serato gate (FMT-05)
+- [x] 05-02-PLAN.md — MP4 support slice: RED stub (test 12), analyze.py MP4 decode (-vn) + write_geob_mp4, .mp4 in ALLOWED_EXTENSIONS + dispatch, Serato gate (FMT-05)
 
 **Wave 3** *(Distribution slice — blocked on Wave 2)*
 
@@ -161,7 +161,7 @@ Plans:
 | 2. PythonBridge + Swift Integration | 5/5 | Complete    | 2026-06-03 |
 | 3. Batch Queue + Drag & Drop UI | 2/2 | Complete   | 2026-06-04 |
 | 4. Serato Library Browser | 3/3 | Complete | 2026-06-08 |
-| 5. Format Expansion + Distribution | 0/3 | Not started | - |
+| 5. Format Expansion + Distribution | 2/3 | In Progress|  |
 
 ---
 
