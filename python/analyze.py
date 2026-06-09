@@ -143,6 +143,27 @@ def load_audio(path: "Path | str") -> "tuple[np.ndarray, int]":
 
         return audio, int(sr)
 
+    elif path.suffix.lower() == '.mp4':
+        # D-10: MP4 loading pipeline — like M4A but with -vn to extract audio stream only.
+        # MP4 is a video container; -vn discards the video stream before decoding.
+        # T-05-02: cmd is a list — no shell=True, no shell interpolation of path
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        cmd = [ffmpeg_exe, '-i', str(path), '-vn', '-f', 'wav', '-ar', '22050', '-ac', '1', 'pipe:1']
+        proc = subprocess.run(cmd, capture_output=True)
+
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"ffmpeg failed for {path}: "
+                f"{proc.stderr.decode(errors='replace')[:500]}"
+            )
+
+        audio, sr = soundfile.read(io.BytesIO(proc.stdout), dtype='float32')
+
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+
+        return audio, int(sr)
+
     else:
         # D-03: AIFF and WAV — soundfile handles them natively via libsndfile
         audio, sr = soundfile.read(str(path), dtype='float32', always_2d=False)
