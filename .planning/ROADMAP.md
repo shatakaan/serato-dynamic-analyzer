@@ -12,7 +12,7 @@
 - [x] **Phase 2: PythonBridge + Swift Integration** - Launch analysis from Swift for a single track; sign and notarize the app bundle (completed 2026-06-02)
 - [x] **Phase 3: Batch Queue + Drag & Drop UI** - Multi-track workflow: drop files, watch progress, read per-track results and errors (completed 2026-06-04)
 - [x] **Phase 4: Serato Library Browser** - Browse crates, inspect existing beatgrids, send library tracks to the analysis queue (completed 2026-06-08)
-- [ ] **Phase 5: Format Expansion + Distribution** - M4A and MP4 support via ffmpeg; signed and notarized DMG for GitHub Releases
+- [x] **Phase 5: Format Expansion + Distribution** - M4A and MP4 support via ffmpeg; signed and notarized DMG for GitHub Releases (completed 2026-06-09)
 
 ---
 
@@ -149,7 +149,7 @@ Plans:
 
 **Wave 3** *(Distribution slice — blocked on Wave 2)*
 
-- [ ] 05-03-PLAN.md — Distribution slice: Makefile `publish` target (gh release create + push-all.sh), README Installation section with Gatekeeper bypass instructions
+- [x] 05-03-PLAN.md — Distribution slice: Makefile `publish` target (gh release create + push-all.sh), README Installation section with Gatekeeper bypass instructions
 
 ---
 
@@ -161,7 +161,7 @@ Plans:
 | 2. PythonBridge + Swift Integration | 5/5 | Complete    | 2026-06-03 |
 | 3. Batch Queue + Drag & Drop UI | 2/2 | Complete   | 2026-06-04 |
 | 4. Serato Library Browser | 3/3 | Complete | 2026-06-08 |
-| 5. Format Expansion + Distribution | 2/3 | In Progress|  |
+| 5. Format Expansion + Distribution | 4/4 | Complete   | 2026-06-09 |
 
 ---
 
