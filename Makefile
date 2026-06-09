@@ -46,11 +46,11 @@ release: deps bundle-swift bundle-python sign dmg
 # ──────────────────────────────────────────────────────────────────────────────
 deps:
 	which uv || brew install uv
-	@test -f "$(BREW_PYTHON)" || (echo "ERROR: Homebrew Python 3.12 not found at $(BREW_PYTHON). Run: brew install python@3.11" && exit 1)
+	@test -f "$(BREW_PYTHON)" || (echo "ERROR: Homebrew Python 3.11 not found at $(BREW_PYTHON). Run: brew install python@3.11" && exit 1)
 	@echo "deps OK — uv and Python 3.11 present"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Create relocatable venv with --copies so python3.12 binary is a real copy.
+# Create relocatable venv with --copies so python3.11 binary is a real copy.
 # A copied binary correctly resolves pyvenv.cfg when moved inside .app bundle.
 # File rule — reruns only if venv dir does not exist.
 # ──────────────────────────────────────────────────────────────────────────────
