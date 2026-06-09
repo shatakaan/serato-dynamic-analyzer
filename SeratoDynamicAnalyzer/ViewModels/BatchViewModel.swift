@@ -57,6 +57,7 @@ class BatchViewModel: ObservableObject {
             let ready = await bridge.waitForReady(timeout: 30)
             if ready {
                 workerReadyCount += 1
+                dispatchNextPendingTracks()  // slot is now ready — assign pending tracks
             } else {
                 fputs("[BatchViewModel] Worker slot \(slotIndex) failed to become ready within 30s\n", stderr)
             }
@@ -105,7 +106,12 @@ class BatchViewModel: ObservableObject {
         }
 
         // Assign pending tracks to idle worker slots.
+        // Only assign to slots that are confirmed ready (index < workerReadyCount).
+        // Newly-appended bridges are started asynchronously via startWorkerSlot();
+        // they call dispatchNextPendingTracks() again once ready, preventing the
+        // double-startWorker() race (CR-01).
         for (slotIndex, bridge) in workers.enumerated() {
+            guard slotIndex < workerReadyCount else { continue }  // slot not yet ready
             guard assignments[slotIndex] == nil else { continue }  // slot busy
             guard let next = tracks.first(where: { $0.status == .pending }) else { break }
             next.status = .analyzing
