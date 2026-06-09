@@ -8,7 +8,9 @@ A native macOS SwiftUI app that performs dynamic BPM/beatgrid analysis for Serat
 
 ### Download
 
-Download the latest `SeratoDynamicAnalyzer-vX.Y.Z.dmg` from the [Releases page](https://github.com/shatakaan/serato-dynamic-analyzer/releases).
+**[Download SeratoDynamicAnalyzer-v0.1.0-beta.1.dmg](https://github.com/shatakaan/serato-dynamic-analyzer/releases/download/v0.1.0-beta.1/SeratoDynamicAnalyzer-v0.1.0-beta.1.dmg)** (beta)
+
+Or browse all releases on the [Releases page](https://github.com/shatakaan/serato-dynamic-analyzer/releases).
 
 Open the DMG and drag `SeratoDynamicAnalyzer.app` to your Applications folder.
 
