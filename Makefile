@@ -107,7 +107,8 @@ sign:
 	find "$(PYTHON_RUNTIME)/venv" \( -name "*.dylib" -o -name "*.so" \) \
 	    | xargs -I{} codesign --force --sign - --options runtime "{}"
 	find "$(PYTHON_RUNTIME)/venv/bin" -type f -perm +111 \
-	    | xargs -I{} codesign --force --sign - --options runtime "{}"
+	    | xargs -I{} codesign --force --sign - --options runtime \
+	        --entitlements "$(ENTITLEMENTS)" "{}"
 	codesign --force --sign - --options runtime \
 	    --entitlements "$(ENTITLEMENTS)" \
 	    "$(APP)"
