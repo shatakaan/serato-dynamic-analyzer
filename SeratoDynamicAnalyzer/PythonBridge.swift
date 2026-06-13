@@ -88,18 +88,17 @@ actor PythonBridge {
     func waitForReady(timeout: TimeInterval = 30) async -> Bool {
         let handle = stdoutPipe.fileHandleForReading
         // Race the line-reading loop against a deadline task (CR-02).
-        // Without this race the deadline check inside the loop only fires when a
-        // new line arrives — a silent Python startup failure (import error, crash
-        // before "ready", buffering) suspends the await forever.
+        // Uses pipeLines (readabilityHandler-based) instead of bytes.lines to
+        // avoid leaving a stale DispatchSource on the pipe after cancellation.
+        // A stale bytes.lines source would silently consume all subsequent
+        // analyzeStream() output, making analysis appear to hang (CR-03).
         return await withTaskGroup(of: Bool.self) { group in
             group.addTask {
-                do {
-                    for try await line in handle.bytes.lines {
-                        if let event = self.parseEvent(line), case .ready = event {
-                            return true
-                        }
+                for await line in self.pipeLines(handle: handle) {
+                    if let event = self.parseEvent(line), case .ready = event {
+                        return true
                     }
-                } catch {}
+                }
                 return false
             }
             group.addTask {
@@ -154,16 +153,16 @@ actor PythonBridge {
                 }
                 let payload = (line + "\n").data(using: .utf8)!
                 stdinPipe.fileHandleForWriting.write(payload)
-                // Read JSONL events until result or error (terminal events)
+                // Read JSONL events until result or error (terminal events).
+                // Uses pipeLines instead of bytes.lines to avoid consuming data
+                // with a stale DispatchSource left over from waitForReady (CR-03).
                 let handle = stdoutPipe.fileHandleForReading
-                do {
-                    for try await rawLine in handle.bytes.lines {
-                        guard let event = parseEvent(rawLine) else { continue }
-                        continuation.yield(event)
-                        if case .result = event { break }
-                        if case .error = event { break }
-                    }
-                } catch {}
+                for await rawLine in self.pipeLines(handle: handle) {
+                    guard let event = self.parseEvent(rawLine) else { continue }
+                    continuation.yield(event)
+                    if case .result = event { break }
+                    if case .error = event { break }
+                }
                 continuation.finish()
             }
         }
