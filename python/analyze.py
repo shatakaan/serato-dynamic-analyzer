@@ -40,16 +40,10 @@ import soundfile
 # Module-level constants
 # ---------------------------------------------------------------------------
 
-# Onset offset correction: subtract 30ms from all beat positions to correct
-# librosa's systematic lateness bias (~20-60ms documented in librosa issue #1052).
-# Configurable constant; not exposed as a CLI arg in Phase 1 (D-18/discretion).
-ONSET_OFFSET_SECONDS: float = 0.030
+# No onset offset correction: beat_track positions already align with human-perceived
+# beat positions (within ~10ms of manually-set Serato markers). Subtracting 30ms
+# made our beats 40-55ms too early vs. manual reference — worse for DJ use.
 
-# Canonical GEOB footer byte per Holzhaus serato_beatgrid.md specification.
-# Source: https://github.com/Holzhaus/serato-tags/blob/main/docs/serato_beatgrid.md
-# PITFALLS.md CR-1 and CR-2 both confirm this is a single null byte \x00.
-# NOTE: ARCHITECTURE.md incorrectly states 0xFF — the Holzhaus spec is ground truth.
-GEOB_FOOTER: bytes = b'\x00'
 
 # Allowed file extensions for CLI path validation (T-01-03 mitigation)
 ALLOWED_EXTENSIONS: frozenset = frozenset({'.mp3', '.aiff', '.aif', '.wav', '.m4a', '.mp4'})
@@ -214,43 +208,27 @@ def detect_beats(
     # Step 1: Onset envelope (input to both tempo estimation and plp())
     oenv = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=hop_length)
 
-    # Step 2: Get robust global BPM estimate via beat_track() dynamic programming.
-    # beat_track uses Ellis 2007 DP which enforces beat regularity across the track —
-    # more stable than raw frame-level percentiles for syncopated rhythms (funk, live
-    # drums) where the onset envelope has multiple periodicity modes.
-    # We use this estimate as a prior to constrain PLP's search window to ±20%.
-    global_tempo, _ = librosa.beat.beat_track(
+    # Step 2–4: Beat detection via beat_track() dynamic programming.
+    # Testing showed PLP consistently returns wrong median BPM (~136) for
+    # syncopated funk tracks regardless of tempo range constraint, while
+    # beat_track (Ellis 2007 DP) returns ~123 BPM (correct ~126).
+    # beat_track enforces beat regularity across the full track which is more
+    # robust than PLP's per-frame local pulse for complex rhythmic patterns.
+    # start_bpm biases DP towards the center of the user-specified range.
+    _, beat_frames = librosa.beat.beat_track(
         onset_envelope=oenv,
         sr=sr,
         hop_length=hop_length,
+        start_bpm=float(bpm_min + bpm_max) / 2,
         trim=False,
     )
-    global_tempo = float(np.clip(global_tempo, bpm_min, bpm_max))
-    plp_bpm_min = float(np.clip(global_tempo * 0.80, bpm_min, bpm_max))
-    plp_bpm_max = float(np.clip(global_tempo * 1.20, bpm_min, bpm_max))
-    if plp_bpm_min >= plp_bpm_max:  # degenerate edge case
-        plp_bpm_min, plp_bpm_max = float(bpm_min), float(bpm_max)
-
-    # Step 3: Predominant Local Pulse — variable-tempo beat extraction (D-07)
-    # win_length=384: window in frames for PLP computation (bvandrc/serato-tools baseline)
-    pulse = librosa.beat.plp(
-        onset_envelope=oenv,
-        sr=sr,
-        hop_length=hop_length,
-        win_length=384,
-        tempo_min=plp_bpm_min,
-        tempo_max=plp_bpm_max,
-    )
-
-    # Step 4: Extract beat frames — local maxima of the PLP pulse curve
-    beat_frames = np.flatnonzero(librosa.util.localmax(pulse))
 
     # Step 5: Convert frames to seconds
     beat_times = librosa.frames_to_time(beat_frames, sr=sr, hop_length=hop_length)
 
-    # Step 6: Apply onset offset correction and clamp at 0.0 (HR-4, T-03-03)
-    # np.maximum ensures no negative positions even when raw time < ONSET_OFFSET_SECONDS
-    beat_times = np.maximum(0.0, beat_times - ONSET_OFFSET_SECONDS)
+    # Step 6: Clamp to 0.0 (no onset correction — beat_track positions already
+    # align with human-perceived beat positions within ~10ms of manual Serato markers)
+    beat_times = np.maximum(0.0, beat_times)
 
     # Step 7: Guard against degenerate results (D-08, T-03-02)
     if len(beat_times) < 4:
@@ -271,17 +249,16 @@ def detect_beats(
 def pack_beatgrid(
     non_terminal_markers: list[tuple[float, int]],
     terminal_marker: tuple[float, float],
-    footer_byte: bytes,
 ) -> bytes:
     """
     Encode Serato BeatGrid markers to the canonical GEOB binary payload.
 
     Binary layout (all multi-byte values are big-endian per CR-1, D-12):
-      [version: 2 bytes = \x01\x01 (this tool, D-07) or \x01\x00 (Serato-written, accepted by decode_beatgrid)]
+      [version: 2 bytes = \x01\x00 (Serato canonical)]
       [count:   4 bytes = uint32 BE, TOTAL markers = len(non_terminal) + 1 (terminal)]
       [non-terminal marker 0: 8 bytes = >f position + >I beats_till_next] * N
       [terminal marker: 8 bytes = >f position + >f bpm]
-      [footer: 1 byte = GEOB_FOOTER]
+      (no footer — actual Serato files end after the terminal marker)
 
     Args:
         non_terminal_markers: List of (position_seconds, beats_till_next).
@@ -290,7 +267,6 @@ def pack_beatgrid(
         terminal_marker: (position_seconds, bpm).
             position_seconds: float, seconds from track start (big-endian f32).
             bpm: float, local BPM at this position (big-endian f32).
-        footer_byte: Must be GEOB_FOOTER (b'\\x00').
 
     Returns:
         bytes: The complete GEOB binary payload.
@@ -320,8 +296,9 @@ def pack_beatgrid(
     term_pos, term_bpm = terminal_marker
     buf += struct.pack('>ff', term_pos, term_bpm)  # CR-1: '>' prefix enforced
 
-    # Footer: canonical null byte from Holzhaus spec (CR-2, D-11)
-    buf += footer_byte
+    # No footer byte — actual Serato files end after the terminal marker.
+    # The Holzhaus spec mentions a footer but real Serato-written tags have none;
+    # adding \x00 made our tags 1 byte too long (230 bytes expected, 231 written).
 
     return bytes(buf)
 
@@ -362,18 +339,12 @@ def decode_beatgrid(data: bytes) -> tuple[list[tuple[float, int]], tuple[float, 
 
     n_non_terminal = total_markers - 1  # last marker is always terminal
 
-    # Validate total length
-    expected_len = 6 + total_markers * 8 + 1
+    # Validate total length: 6 header + total_markers * 8 (no footer)
+    expected_len = 6 + total_markers * 8
     if len(data) != expected_len:
         raise ValueError(
             f"GEOB data length {len(data)} inconsistent with total_markers={total_markers}: "
             f"expected {expected_len} bytes"
-        )
-
-    # Verify footer
-    if data[-1:] != GEOB_FOOTER:
-        raise ValueError(
-            f"GEOB footer wrong: {data[-1:].hex()} (expected {GEOB_FOOTER.hex()})"
         )
 
     offset = 6  # skip version (2) + count (4)
@@ -855,7 +826,7 @@ def analyze_track(
     # dry_run=True: pack bytes (so result is meaningful) but skip backup + write (SAFE-02)
     emit_progress(path_str, 80)
     try:
-        geob_bytes = pack_beatgrid(non_terminal, terminal, GEOB_FOOTER)
+        geob_bytes = pack_beatgrid(non_terminal, terminal)
         if not dry_run:
             backup_path_obj = create_backup(resolved)
             backup_path_str = str(backup_path_obj)
