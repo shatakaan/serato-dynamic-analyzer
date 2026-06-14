@@ -214,18 +214,21 @@ def detect_beats(
     # Step 1: Onset envelope (input to both tempo estimation and plp())
     oenv = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=hop_length)
 
-    # Step 2: Frame-level tempo — aggregate=None returns per-frame BPM array (D-07).
-    # Use 5th/95th percentile of the per-frame distribution to tighten plp() bounds,
-    # so the pulse tracker is driven by what the track actually contains.
-    tempo_frames = librosa.feature.tempo(
+    # Step 2: Get robust global BPM estimate via beat_track() dynamic programming.
+    # beat_track uses Ellis 2007 DP which enforces beat regularity across the track —
+    # more stable than raw frame-level percentiles for syncopated rhythms (funk, live
+    # drums) where the onset envelope has multiple periodicity modes.
+    # We use this estimate as a prior to constrain PLP's search window to ±20%.
+    global_tempo, _ = librosa.beat.beat_track(
         onset_envelope=oenv,
         sr=sr,
         hop_length=hop_length,
-        aggregate=None,
+        trim=False,
     )
-    plp_bpm_min = float(np.clip(np.percentile(tempo_frames, 5), bpm_min, bpm_max))
-    plp_bpm_max = float(np.clip(np.percentile(tempo_frames, 95), bpm_min, bpm_max))
-    if plp_bpm_min >= plp_bpm_max:  # degenerate (constant-tempo track)
+    global_tempo = float(np.clip(global_tempo, bpm_min, bpm_max))
+    plp_bpm_min = float(np.clip(global_tempo * 0.80, bpm_min, bpm_max))
+    plp_bpm_max = float(np.clip(global_tempo * 1.20, bpm_min, bpm_max))
+    if plp_bpm_min >= plp_bpm_max:  # degenerate edge case
         plp_bpm_min, plp_bpm_max = float(bpm_min), float(bpm_max)
 
     # Step 3: Predominant Local Pulse — variable-tempo beat extraction (D-07)
@@ -302,8 +305,9 @@ def pack_beatgrid(
         )
 
     # Header: version (2 bytes) + total marker count including terminal (uint32 BE, 4 bytes)
-    # D-07: byte[1]=0x01 distinguishes our tool's output from Serato's 0x01 0x00
-    OUR_TOOL_VERSION: bytes = b'\x01\x01'
+    # Must match Serato's version bytes \x01\x00 exactly — Serato ignores tags with
+    # non-standard version bytes, treating them as unanalyzed (D-07 revision).
+    OUR_TOOL_VERSION: bytes = b'\x01\x00'
     buf = bytearray(OUR_TOOL_VERSION)
     buf += struct.pack('>I', len(non_terminal_markers) + 1)
 
